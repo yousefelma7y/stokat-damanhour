@@ -1,0 +1,26 @@
+.DS_Store
+
+# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+
+# build artifacts
+dist/
+coverage/
+*.tsbuildinfo
+
+# environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*

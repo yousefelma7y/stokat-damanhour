@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="25" height="23" viewBox="0 0 25 23">
+  <defs>
+    <clipPath id="clip-path">
+      <rect id="Rectangle_1932" data-name="Rectangle 1932" width="25" height="23" transform="translate(1042.5 317.5)" fill="#fff" stroke="#707070" stroke-width="1"/>
+    </clipPath>
+  </defs>
+  <g id="calendar" transform="translate(-1042.5 -317.5)" clip-path="url(#clip-path)">
+    <g id="a37ed7148d2487f1979d566641fe2257" transform="translate(1039.629 313.449)">
+      <path id="Path_38190" data-name="Path 38190" d="M21.155,6.3h2.25a1.806,1.806,0,0,1,1.8,1.8V21.6a1.806,1.806,0,0,1-1.8,1.8H5.4a1.806,1.806,0,0,1-1.8-1.8V8.1A1.806,1.806,0,0,1,5.4,6.3h2.25" fill="#e5e5e5"/>
+      <path id="Path_38191" data-name="Path 38191" d="M23.405,6.3H5.4A1.806,1.806,0,0,0,3.6,8.1v2.25h21.6V8.1A1.806,1.806,0,0,0,23.405,6.3Z" fill="#ea685e"/>
+      <line id="Line_491" data-name="Line 491" x2="2.701" transform="translate(15.753 6.301)" fill="none" stroke="#2c3e50" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="0.9"/>
+      <line id="Line_492" data-name="Line 492" x2="2.701" transform="translate(10.352 6.301)" fill="none" stroke="#2c3e50" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="0.9"/>
+      <path id="Path_38192" data-name="Path 38192" d="M15.753,23.405H5.4a1.806,1.806,0,0,1-1.8-1.8V8.1A1.806,1.806,0,0,1,5.4,6.3h2.25" fill="none" stroke="#2c3e50" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="0.9"/>
+      <path id="Path_38193" data-name="Path 38193" d="M21.155,6.3h2.25a1.806,1.806,0,0,1,1.8,1.8v7.652" fill="none" stroke="#2c3e50" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="0.9"/>
+      <circle id="Ellipse_1417" data-name="Ellipse 1417" cx="0.45" cy="0.45" r="0.45" transform="translate(12.603 13.593)" fill="none" stroke="#2c3e50" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="0.9"/>
+      <circle id="Ellipse_1418" data-name="Ellipse 1418" cx="0.45" cy="0.45" r="0.45" transform="translate(15.753 13.593)" fill="none" stroke="#2c3e50" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="0.9"/>
+      <circle id="Ellipse_1419" data-name="Ellipse 1419" cx="0.45" cy="0.45" r="0.45" transform="translate(18.904 13.593)" fill="none" stroke="#2c3e50" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="0.9"/>
+      <circle id="Ellipse_1420" data-name="Ellipse 1420" cx="0.45" cy="0.45" r="0.45" transform="translate(22.055 13.593)" fill="none" stroke="#2c3e50" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="0.9"/>
+      <circle id="Ellipse_1421" data-name="Ellipse 1421" cx="0.45" cy="0.45" r="0.45" transform="translate(12.603 16.744)" fill="none" stroke="#2c3e50" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="0.9"/>
+      <circle id="Ellipse_1422" data-name="Ellipse 1422" cx="0.45" cy="0.45" r="0.45" transform="translate(9.452 16.744)" fill="none" stroke="#2c3e50" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="0.9"/>
+      <circle id="Ellipse_1423" data-name="Ellipse 1423" cx="0.45" cy="0.45" r="0.45" transform="translate(6.301 16.744)" fill="none" stroke="#2c3e50" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="0.9"/>
+      <circle id="Ellipse_1424" data-name="Ellipse 1424" cx="0.45" cy="0.45" r="0.45" transform="translate(15.753 16.744)" fill="none" stroke="#2c3e50" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="0.9"/>
+      <circle id="Ellipse_1425" data-name="Ellipse 1425" cx="0.45" cy="0.45" r="0.45" transform="translate(12.603 19.894)" fill="none" stroke="#2c3e50" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="0.9"/>
+      <circle id="Ellipse_1426" data-name="Ellipse 1426" cx="0.45" cy="0.45" r="0.45" transform="translate(9.452 19.894)" fill="none" stroke="#2c3e50" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="0.9"/>
+      <circle id="Ellipse_1427" data-name="Ellipse 1427" cx="0.45" cy="0.45" r="0.45" transform="translate(6.301 19.894)" fill="none" stroke="#2c3e50" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="0.9"/>
+      <line id="Line_493" data-name="Line 493" y1="2.701" transform="translate(14.403 4.501)" fill="none" stroke="#2c3e50" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="0.9"/>
+      <line id="Line_494" data-name="Line 494" y1="2.701" transform="translate(9.002 4.501)" fill="none" stroke="#2c3e50" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="0.9"/>
+      <line id="Line_495" data-name="Line 495" y1="2.701" transform="translate(19.804 4.501)" fill="none" stroke="#2c3e50" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="0.9"/>
+      <line id="Line_496" data-name="Line 496" x2="21.605" transform="translate(3.601 10.352)" fill="none" stroke="#2c3e50" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="0.9"/>
+      <circle id="Ellipse_1428" data-name="Ellipse 1428" cx="4.996" cy="4.996" r="4.996" transform="translate(17.149 16.609)" fill="#d4c8bc"/>
+      <path id="Path_38194" data-name="Path 38194" d="M19.534,17.329l2.521,4.186,4.771-1.62a5.436,5.436,0,0,0-2.971-2.971A4.788,4.788,0,0,0,19.534,17.329Z" fill="#ffd766"/>
+      <circle id="Ellipse_1429" data-name="Ellipse 1429" cx="4.996" cy="4.996" r="4.996" transform="translate(17.149 16.609)" fill="none" stroke="#2c3e50" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="0.9"/>
+      <line id="Line_497" data-name="Line 497" y1="0.81" x2="2.295" transform="translate(22.145 20.795)" fill="none" stroke="#2c3e50" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="0.9"/>
+      <line id="Line_498" data-name="Line 498" x1="1.845" y1="2.971" transform="translate(20.299 18.634)" fill="none" stroke="#2c3e50" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" stroke-width="0.9"/>
+    </g>
+  </g>
+</svg>

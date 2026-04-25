@@ -1,0 +1,34 @@
+@import url("https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap");
+@import "tailwindcss";
+@import "tw-animate-css";
+
+:root {
+  --bg: #b5bbc0d7;
+  --secoundBg: #ffffff;
+  --color-secondary: #000000;
+  --btnColor: #6a7282;
+  --font-arabic: "Cairo", sans-serif !important;
+}
+
+body {
+  background-color: var(--bg);
+  font-family: var(--font-arabic);
+  font-weight: 700;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+/* For RTL support */
+html[dir="rtl"] {
+  font-family: var(--font-arabic);
+}
+
+.koko {
+  position: fixed;
+}
