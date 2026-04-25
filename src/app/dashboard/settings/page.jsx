@@ -56,6 +56,45 @@ export default function SettingsPage() {
     confirmPassword: "",
   });
 
+  const profileDisplayName =
+    userData?.userName || userData?.brandName || "المستخدم";
+  const storeDisplayName =
+    userData?.brandName || userData?.userName || "Stockat Damanhour";
+  const roleMeta = {
+    admin: {
+      label: "مدير النظام",
+      badge: "bg-emerald-50 text-emerald-700 border-emerald-200",
+      accent: "from-emerald-500 via-sky-500 to-slate-900",
+      glow: "shadow-emerald-200/70",
+    },
+    cashier: {
+      label: "كاشير",
+      badge: "bg-sky-50 text-sky-700 border-sky-200",
+      accent: "from-sky-500 via-cyan-400 to-slate-900",
+      glow: "shadow-sky-200/70",
+    },
+    accountant: {
+      label: "محاسب",
+      badge: "bg-amber-50 text-amber-700 border-amber-200",
+      accent: "from-amber-500 via-orange-400 to-slate-900",
+      glow: "shadow-amber-200/70",
+    },
+    default: {
+      label: "مستخدم",
+      badge: "bg-slate-100 text-slate-700 border-slate-200",
+      accent: "from-slate-500 via-slate-400 to-slate-900",
+      glow: "shadow-slate-200/70",
+    },
+  }[role || "default"];
+  const profileInitials =
+    profileDisplayName
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0])
+      .join("")
+      .toUpperCase() || "U";
+
   useEffect(() => {
     fetchUserData();
   }, []);
@@ -314,23 +353,41 @@ export default function SettingsPage() {
       )}
 
       <div className="bg-white m-4 md:m-6 lg:m-8 p-6 rounded-xl">
-        <div className="flex items-center gap-6 mb-6 pb-6 border-gray-300 border-b">
-          <div className="relative">
-            <div className="flex justify-center items-center bg-gray-500 p-0.5 rounded-full w-24 h-24 overflow-hidden">
-              <Image
-                src="/maleAvatar.png"
-                alt={`${userData?.brandName || "Stockat Damanhour"} logo`}
-                width={100}
-                height={100}
-                className={`rounded-full h-full w-full object-cover`}
-              />
+        <div className="mb-6 flex items-center gap-4 border-gray-200 border-b pb-6">
+          <div className={`relative rounded-[28px] bg-gradient-to-br ${roleMeta.accent} p-[2px] shadow-xl ${roleMeta.glow}`}>
+            <div className="flex justify-center items-center bg-white rounded-[26px] w-24 h-24 overflow-hidden">
+              {logoPreview ? (
+                <Image
+                  src={logoPreview}
+                  alt={`${storeDisplayName} logo`}
+                  width={96}
+                  height={96}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <span className="font-black text-slate-900 text-2xl">
+                  {profileInitials}
+                </span>
+              )}
             </div>
+            <span className="right-1 bottom-1 absolute border-2 border-white rounded-full w-3.5 h-3.5 bg-emerald-400" />
           </div>
-          <div>
-            <h3 className="font-medium text-gray-900 text-lg">
-              {userData?.brandName}
-            </h3>
-            {/* <p className="text-gray-500 text-sm">شعار المتجر</p> */}
+
+          <div className="min-w-0 flex-1">
+            <div className="flex sm:flex-row flex-col sm:items-center gap-2 sm:gap-3">
+              <h3 className="truncate font-extrabold text-slate-900 text-xl">
+                {profileDisplayName}
+              </h3>
+              <span className={`inline-flex w-fit rounded-full border px-3 py-1 font-bold text-[11px] ${roleMeta.badge}`}>
+                {roleMeta.label}
+              </span>
+            </div>
+            <p className="mt-2 font-medium text-slate-500 text-sm">
+              {storeDisplayName}
+            </p>
+            <p className="mt-1 text-slate-400 text-xs">
+              ملف الحساب والإعدادات العامة
+            </p>
           </div>
         </div>
 

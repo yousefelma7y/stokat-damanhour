@@ -30,8 +30,6 @@ import { Activity, BadgeX, Banknote, FactoryIcon, FolderOpenDot, HandCoins, Land
 import axiosClient from "@/lib/axios-client";
 import { canAccessPage } from "@/lib/permissions";
 
-import Image from "next/image";
-
 const Sidebar = ({ }) => {
   const [active, setActive] = useState("dashboard");
   const pathname = usePathname();
@@ -39,10 +37,58 @@ const Sidebar = ({ }) => {
   const [isSidebarVisible, setIsSidebarVisible] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [role, setRole] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
-    setRole(Cookies.get("role"));
+    const storedRole = Cookies.get("role");
+    const storedUser = Cookies.get("user");
+
+    setRole(storedRole || null);
+
+    if (storedUser) {
+      try {
+        setCurrentUser(JSON.parse(storedUser));
+      } catch {
+        setCurrentUser(null);
+      }
+    }
   }, []);
+
+  const displayName = currentUser?.userName || currentUser?.brandName || "المستخدم";
+  const roleMeta = {
+    admin: {
+      label: "مدير النظام",
+      badge: "bg-emerald-50 text-emerald-700 border-emerald-200",
+      accent: "from-emerald-500 via-sky-500 to-slate-900",
+      glow: "shadow-emerald-200/70",
+    },
+    cashier: {
+      label: "كاشير",
+      badge: "bg-sky-50 text-sky-700 border-sky-200",
+      accent: "from-sky-500 via-cyan-400 to-slate-900",
+      glow: "shadow-sky-200/70",
+    },
+    accountant: {
+      label: "محاسب",
+      badge: "bg-amber-50 text-amber-700 border-amber-200",
+      accent: "from-amber-500 via-orange-400 to-slate-900",
+      glow: "shadow-amber-200/70",
+    },
+    default: {
+      label: "مستخدم",
+      badge: "bg-slate-100 text-slate-700 border-slate-200",
+      accent: "from-slate-500 via-slate-400 to-slate-900",
+      glow: "shadow-slate-200/70",
+    },
+  }[role || "default"];
+
+  const userInitials = displayName
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "U";
 
   useEffect(() => {
     if (pathname == "/dashboard") {
@@ -263,18 +309,35 @@ const Sidebar = ({ }) => {
             )}
           </button>
           {/* Logo section */}
-          <div className="flex flex-col justify-center items-center w-full  absolute top-2 z-20! pb-2 border-b border-gray-200">
-            <Link href="/dashboard">
-              <Image
-                src="/maleAvatar.png"
-                alt="Demo profile image"
-                width={50}
-                height={50}
-                className={`rounded-full ${isOpen
-                  ? "size-10 lg:size-12.5"
-                  : "size-7.5 lg:size-10"
+          <div className="absolute top-2 z-20! flex w-full flex-col items-center justify-center border-b border-gray-200 pb-3">
+            <Link href="/dashboard" className="w-full px-2">
+              <div
+                className={`mx-auto flex items-center transition-all duration-300 ${isOpen
+                  ? "w-full max-w-[220px] gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm"
+                  : "w-fit rounded-2xl bg-transparent p-1"
                   }`}
-              />
+              >
+                <div className={`relative shrink-0 rounded-2xl bg-gradient-to-br ${roleMeta.accent} p-[2px] shadow-lg ${roleMeta.glow}`}>
+                  <div
+                    className={`flex items-center justify-center rounded-[14px] bg-white font-black text-slate-900 ${isOpen ? "size-12 text-sm" : "size-10 text-xs lg:size-11"
+                      }`}
+                  >
+                    {userInitials}
+                  </div>
+                  <span className="absolute -right-1 -bottom-1 flex size-3 rounded-full border-2 border-white bg-emerald-400" />
+                </div>
+
+                {isOpen && (
+                  <div className="min-w-0 flex-1 text-right">
+                    <p className="truncate font-extrabold text-sm text-slate-900">
+                      {displayName}
+                    </p>
+                    <span className={`mt-1 inline-flex rounded-full border px-2.5 py-1 text-[10px] font-bold ${roleMeta.badge}`}>
+                      {roleMeta.label}
+                    </span>
+                  </div>
+                )}
+              </div>
             </Link>
           </div>
           {/* Sidebar Navigation */}

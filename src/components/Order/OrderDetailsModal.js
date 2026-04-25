@@ -54,6 +54,7 @@ const OrderDetailsModal = ({ isOpen, onClose, orderId }) => {
   const orderType = ORDER_TYPE_MAP[order?.order_type] || ORDER_TYPE_MAP.regular;
   const status = STATUS_MAP[order?.status] || STATUS_MAP.pending;
   const StatusIcon = status.Icon;
+  const discountAmount = Number(order?.discount?.amount || 0);
 
   return (
     <div className="z-50 fixed inset-0 flex justify-center items-center bg-black/60 backdrop-blur-sm p-4">
@@ -202,6 +203,14 @@ const OrderDetailsModal = ({ isOpen, onClose, orderId }) => {
                     <span className="text-slate-600">المجموع الفرعي:</span>
                     <span className="font-medium text-slate-800">{(order.subtotal || 0).toLocaleString()} EGP</span>
                   </div>
+                  {discountAmount > 0 && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-600">الخصم:</span>
+                      <span className="font-medium text-rose-600">
+                        -{discountAmount.toLocaleString()} EGP
+                      </span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-center">
                     <span className="text-slate-600">الدفع:</span>
                     <span className="font-medium text-slate-800">كاش</span>
