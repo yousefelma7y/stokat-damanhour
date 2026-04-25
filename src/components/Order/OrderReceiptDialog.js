@@ -15,78 +15,92 @@ const PAYMENT_METHOD_LABELS = {
 
 const PRINT_STYLES = `
   @page {
-    size: 80mm auto;
-    margin: 0;
+    size: 72mm auto;
+    margin: 0 !important;
   }
 
   * {
     box-sizing: border-box;
-  }
-
-  html,
-  body {
     margin: 0;
     padding: 0;
-    background: #ffffff;
-    color: #111827;
-    font-family: Arial, sans-serif;
-    direction: rtl;
   }
 
-  body {
+  html, body {
+    width: 72mm;
+    max-width: 72mm;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    color: #000 !important;
+    font-family: 'Courier New', 'Lucida Console', 'Arial', monospace;
+    direction: rtl;
+    line-height: 1.4;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+  }
+
+  /* Force ALL text to pure black for thermal printer */
+  *, *::before, *::after {
+    color: #000 !important;
   }
 
   img {
     max-width: 100%;
     display: block;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
   }
 
   .receipt-content {
-    width: 72mm;
+    width: 68mm;
+    max-width: 68mm;
     margin: 0 auto;
-    padding: 4mm 3.5mm 5mm;
-  }
-
-  .receipt-paper {
-    width: 100%;
+    padding: 1mm 2mm;
+    background: #fff;
   }
 
   .receipt-header {
     text-align: center;
-    border-bottom: 1px solid #d1d5db;
-    padding-bottom: 8px;
-    margin-bottom: 8px;
+    border-bottom: 2px solid #000;
+    padding-bottom: 6px;
+    margin-bottom: 6px;
   }
 
   .receipt-store {
     font-size: 18px;
-    font-weight: 700;
-    line-height: 1.4;
+    font-weight: 900;
+    color: #000 !important;
+    line-height: 1.3;
   }
 
   .receipt-subtext {
-    margin-top: 4px;
-    color: #4b5563;
+    margin-top: 3px;
     font-size: 11px;
-    line-height: 1.6;
+    font-weight: 700;
+    color: #000 !important;
+    line-height: 1.5;
   }
 
   .receipt-badge {
     display: inline-block;
-    margin: 0 auto 8px;
-    padding: 4px 10px;
-    border: 1px solid #111827;
-    border-radius: 999px;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
+    margin: 0 auto 6px;
+    padding: 3px 14px;
+    background-color: #000;
+    color: #fff !important;
+    font-size: 13px;
+    font-weight: 900;
+    letter-spacing: 1px;
+  }
+
+  .receipt-badge-wrap {
+    text-align: center;
+    padding: 5px 0;
+    border-bottom: 1px dashed #000;
   }
 
   .receipt-section {
-    border-bottom: 1px dashed #d1d5db;
-    padding: 8px 0;
+    border-bottom: 1px dashed #000;
+    padding: 4px 0;
   }
 
   .receipt-section:last-child {
@@ -98,9 +112,11 @@ const PRINT_STYLES = `
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 4px;
+    gap: 6px;
+    margin-bottom: 2px;
     font-size: 11px;
+    font-weight: 700;
+    color: #000 !important;
     line-height: 1.5;
   }
 
@@ -109,56 +125,60 @@ const PRINT_STYLES = `
   }
 
   .receipt-label {
-    color: #4b5563;
-    font-weight: 700;
+    font-weight: 900;
+    color: #000 !important;
   }
 
   .receipt-value {
-    color: #111827;
-    font-weight: 600;
+    font-weight: 700;
+    color: #000 !important;
     text-align: left;
   }
 
   .receipt-barcode {
     text-align: center;
+    padding: 4px 0;
+    border-bottom: 1px dashed #000;
   }
 
   .receipt-barcode img {
     width: 100%;
-    max-width: 180px;
-    height: 42px;
-    margin: 0 auto 6px;
+    max-width: 170px;
+    height: 36px;
+    margin: 0 auto 4px;
     object-fit: contain;
   }
 
   .receipt-order-id {
-    color: #6b7280;
-    font-size: 10px;
-    font-family: monospace;
+    color: #000 !important;
+    font-size: 9px;
+    font-weight: 700;
+    font-family: 'Courier New', monospace;
     direction: ltr;
     text-align: center;
+    word-break: break-all;
   }
 
   .receipt-items-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
-    padding-bottom: 6px;
-    margin-bottom: 4px;
-    border-bottom: 1px solid #d1d5db;
-    font-size: 10px;
-    font-weight: 700;
-    color: #374151;
+    gap: 6px;
+    padding-bottom: 4px;
+    margin-bottom: 2px;
+    border-bottom: 2px solid #000;
+    font-size: 12px;
+    font-weight: 900;
+    color: #000 !important;
   }
 
   .receipt-item {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 10px;
-    padding: 7px 0;
-    border-bottom: 1px dotted #e5e7eb;
+    gap: 6px;
+    padding: 3px 0;
+    border-bottom: 1px dotted #333;
   }
 
   .receipt-item:last-child {
@@ -172,60 +192,108 @@ const PRINT_STYLES = `
   }
 
   .receipt-item-name {
-    color: #111827;
-    font-size: 11px;
-    font-weight: 700;
-    line-height: 1.5;
+    color: #000 !important;
+    font-size: 12px;
+    font-weight: 900;
+    line-height: 1.4;
     word-break: break-word;
   }
 
   .receipt-item-meta {
-    margin-top: 2px;
-    color: #6b7280;
-    font-size: 10px;
-    line-height: 1.45;
+    margin-top: 1px;
+    color: #000 !important;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.4;
   }
 
   .receipt-item-total {
-    min-width: 66px;
-    color: #111827;
+    min-width: 60px;
+    color: #000 !important;
     font-size: 11px;
-    font-weight: 700;
+    font-weight: 900;
     text-align: left;
     direction: ltr;
     white-space: nowrap;
   }
 
   .receipt-total-box {
-    border-top: 2px solid #111827;
-    padding-top: 8px;
+    border-top: 2px solid #000;
+    padding-top: 4px;
   }
 
   .receipt-grand-total {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
-    margin-top: 6px;
-    padding-top: 6px;
-    border-top: 1px solid #111827;
-    font-size: 14px;
-    font-weight: 700;
+    gap: 6px;
+    margin-top: 3px;
+    padding: 5px 0;
+    border-top: 2px solid #000;
+    border-bottom: 2px solid #000;
+    font-size: 16px;
+    font-weight: 900;
+    color: #000 !important;
   }
 
   .receipt-note {
-    font-size: 11px;
-    line-height: 1.7;
-    color: #374151;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.5;
+    color: #000 !important;
     white-space: pre-wrap;
   }
 
   .receipt-footer {
-    padding-top: 10px;
+    padding-top: 6px;
+    border-top: 2px solid #000;
     text-align: center;
+    font-weight: 900;
+    color: #000 !important;
+    line-height: 1.6;
+  }
+
+  .receipt-footer-main {
+    font-size: 13px;
+    font-weight: 900;
+  }
+
+  .receipt-footer-sub {
     font-size: 10px;
-    color: #4b5563;
-    line-height: 1.7;
+    font-weight: 700;
+  }
+
+  .receipt-footer-line {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    margin-top: 4px;
+  }
+
+  @media print {
+    html, body {
+      width: 72mm;
+      max-width: 72mm;
+      margin: 0;
+      padding: 0;
+    }
+
+    .receipt-content {
+      page-break-after: avoid;
+      page-break-inside: avoid;
+    }
+
+    * {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      color: #000 !important;
+    }
+
+    /* Keep badge inverted */
+    .receipt-badge {
+      background-color: #000 !important;
+      color: #fff !important;
+    }
   }
 `;
 
@@ -249,7 +317,7 @@ const getPaymentMethodLabel = (paymentMethod) =>
   PAYMENT_METHOD_LABELS[paymentMethod] || paymentMethod || "كاش";
 
 const getOrderTitle = (orderType) =>
-  orderType === "weight" ? "فاتورة وزن" : "فاتورة شراء";
+  orderType === "weight" ? "فاتورة وزن" : "فاتورة بيع";
 
 const getReceiptItems = (order) => {
   const regularItems = (order?.items || []).map((item, index) => ({
@@ -332,9 +400,11 @@ const OrderReceipt = ({ order, isGift, user, storeSettings }) => {
         JsBarcode(canvas, order._id.toString(), {
           format: "CODE128",
           width: 1.6,
-          height: 42,
+          height: 36,
           displayValue: false,
           margin: 0,
+          background: "#ffffff",
+          lineColor: "#000000",
         });
         setBarcodeUrl(canvas.toDataURL("image/png"));
       } catch {
@@ -346,150 +416,298 @@ const OrderReceipt = ({ order, isGift, user, storeSettings }) => {
   }, [order?._id]);
 
   return (
-    <div className="receipt-shell mx-auto w-full max-w-[380px]">
+    <div className="receipt-shell mx-auto w-full max-w-[260px]">
       <div
-        className="receipt-content receipt-paper space-y-3 rounded-[28px] border border-slate-200 bg-white p-5 text-slate-800 shadow-[0_16px_40px_rgba(15,23,42,0.08)]"
+        className="receipt-content receipt-paper"
         dir="rtl"
+        style={{
+          width: '100%',
+          maxWidth: '260px',
+          margin: '0 auto',
+          padding: '4px 6px',
+          backgroundColor: '#fff',
+          fontFamily: "'Courier New', 'Lucida Console', monospace",
+          fontSize: '12px',
+          color: '#000',
+          lineHeight: '1.5',
+        }}
       >
-        <div className="receipt-header border-slate-200 border-b pb-3 text-center">
-          <h2 className="receipt-store font-black text-[22px] text-slate-950 leading-tight">
+        {/* ═══════ STORE HEADER ═══════ */}
+        <div className="receipt-header" style={{
+          textAlign: 'center',
+          paddingBottom: '6px',
+          borderBottom: '2px solid #000',
+        }}>
+          <div className="receipt-store" style={{
+            fontSize: '18px',
+            fontWeight: '900',
+            color: '#000',
+            letterSpacing: '1px',
+            marginBottom: '2px',
+          }}>
             {storeName}
-          </h2>
+          </div>
           {(storeLocation || storePhone) && (
-            <div className="receipt-subtext mt-2 space-y-1 text-slate-500 text-xs leading-6">
-              {storeLocation && <p>{storeLocation}</p>}
+            <div className="receipt-subtext" style={{ marginTop: '3px' }}>
+              {storeLocation && (
+                <div style={{ fontSize: '11px', fontWeight: '700', color: '#000' }}>
+                  {storeLocation}
+                </div>
+              )}
               {storePhone && (
-                <p dir="ltr" className="font-medium">
+                <div dir="ltr" style={{ fontSize: '11px', fontWeight: '700', color: '#000' }}>
                   {storePhone}
-                </p>
+                </div>
               )}
             </div>
           )}
         </div>
 
-        <div className="receipt-section space-y-1 border-slate-200 border-b border-dashed pb-3">
-          <div className="receipt-row flex items-center justify-between gap-3 text-xs">
-            <span className="receipt-label font-bold text-slate-500">رقم الطلب</span>
-            <span className="receipt-value font-semibold text-slate-900">
+        {/* ═══════ RECEIPT TYPE BADGE ═══════ */}
+        <div className="receipt-badge-wrap" style={{
+          textAlign: 'center',
+          padding: '5px 0',
+          borderBottom: '1px dashed #000',
+        }}>
+          <div className="receipt-badge" style={{
+            display: 'inline-block',
+            backgroundColor: '#000',
+            color: '#fff',
+            padding: '3px 14px',
+            fontSize: '13px',
+            fontWeight: '900',
+            letterSpacing: '1px',
+          }}>
+            {getOrderTitle(order?.order_type)}
+          </div>
+        </div>
+
+        {/* ═══════ ORDER INFO ═══════ */}
+        <div className="receipt-section" style={{
+          padding: '4px 0',
+          borderBottom: '1px dashed #000',
+          fontSize: '11px',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+            <span style={{ fontWeight: '900', color: '#000' }}>رقم الطلب:</span>
+            <span style={{ fontWeight: '700', color: '#000' }}>
               #{order?.orderNumber || order?._id || "0000"}
             </span>
           </div>
-          <div className="receipt-row flex items-center justify-between gap-3 text-xs">
-            <span className="receipt-label font-bold text-slate-500">التاريخ</span>
-            <span className="receipt-value font-semibold text-slate-900 text-left">
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+            <span style={{ fontWeight: '900', color: '#000' }}>التاريخ:</span>
+            <span style={{ fontWeight: '700', color: '#000', textAlign: 'left' }}>
               {formatDate(order?.createdAt || new Date())}
             </span>
           </div>
-          <div className="receipt-row flex items-center justify-between gap-3 text-xs">
-            <span className="receipt-label font-bold text-slate-500">الدفع</span>
-            <span className="receipt-value font-semibold text-slate-900">
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+            <span style={{ fontWeight: '900', color: '#000' }}>الدفع:</span>
+            <span style={{ fontWeight: '700', color: '#000' }}>
               {getPaymentMethodLabel(order?.paymentMethod)}
             </span>
           </div>
-          <div className="receipt-row flex items-center justify-between gap-3 text-xs">
-            <span className="receipt-label font-bold text-slate-500">العميل</span>
-            <span className="receipt-value font-semibold text-slate-900">
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+            <span style={{ fontWeight: '900', color: '#000' }}>العميل:</span>
+            <span style={{ fontWeight: '700', color: '#000' }}>
               {order?.customer?.name || "عميل نقدي"}
             </span>
           </div>
           {order?.customer?.phone && (
-            <div className="receipt-row flex items-center justify-between gap-3 text-xs">
-              <span className="receipt-label font-bold text-slate-500">الهاتف</span>
-              <span className="receipt-value font-semibold text-slate-900" dir="ltr">
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ fontWeight: '900', color: '#000' }}>الهاتف:</span>
+              <span dir="ltr" style={{ fontWeight: '700', color: '#000' }}>
                 {order.customer.phone}
               </span>
             </div>
           )}
         </div>
 
-        <div className="receipt-section receipt-barcode border-slate-200 border-b border-dashed pb-3 text-center">
+        {/* ═══════ BARCODE ═══════ */}
+        <div className="receipt-barcode" style={{
+          textAlign: 'center',
+          padding: '4px 0',
+          borderBottom: '1px dashed #000',
+        }}>
           {barcodeUrl && (
-            <img
-              src={barcodeUrl}
-              alt="Order Barcode"
-              className="mx-auto mb-2 h-12 w-full max-w-[190px] object-contain"
-            />
+            <div style={{ display: 'flex', justifyContent: 'center', margin: '3px 0' }}>
+              <img
+                src={barcodeUrl}
+                alt="Barcode"
+                style={{
+                  height: '36px',
+                  width: 'auto',
+                  maxWidth: '170px',
+                  imageRendering: 'crisp-edges',
+                }}
+              />
+            </div>
           )}
-          <p className="receipt-order-id font-mono text-[11px] text-slate-500" dir="ltr">
+          <div className="receipt-order-id" style={{
+            fontSize: '9px',
+            fontWeight: '700',
+            color: '#000',
+            fontFamily: "'Courier New', monospace",
+            wordBreak: 'break-all',
+          }} dir="ltr">
             {order?._id || "00000000"}
-          </p>
+          </div>
         </div>
 
-        <div className="receipt-section border-slate-200 border-b border-dashed pb-2">
-          <div className="receipt-items-head mb-1 flex items-center justify-between gap-3 border-slate-200 border-b pb-2 font-bold text-[11px] text-slate-600">
+        {/* ═══════ ITEMS TABLE HEADER ═══════ */}
+        <div style={{ padding: '4px 0 2px 0', borderBottom: '2px solid #000' }}>
+          <div className="receipt-items-head" style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            fontSize: '12px',
+            fontWeight: '900',
+            color: '#000',
+            border: 'none',
+            padding: '0',
+            margin: '0',
+          }}>
             <span>الأصناف</span>
             {!isGift && <span>الإجمالي</span>}
           </div>
+        </div>
 
+        {/* ═══════ ITEMS ═══════ */}
+        <div style={{ padding: '2px 0' }}>
           {receiptItems.length > 0 ? (
             receiptItems.map((item) => (
-              <div
-                key={item.id}
-                className="receipt-item flex items-start justify-between gap-3 border-slate-200 border-b border-dotted py-2 last:border-b-0"
-              >
-                <div className="receipt-item-info min-w-0 flex-1">
-                  <p className="receipt-item-name font-bold text-[13px] text-slate-950 leading-6 break-words">
+              <div key={item.id} className="receipt-item" style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                padding: '3px 0',
+                borderBottom: '1px dotted #333',
+              }}>
+                <div className="receipt-item-info" style={{ flex: 1, minWidth: 0 }}>
+                  <div className="receipt-item-name" style={{
+                    fontSize: '12px',
+                    fontWeight: '900',
+                    color: '#000',
+                    marginBottom: '1px',
+                    wordBreak: 'break-word',
+                  }}>
                     {item.name}
-                  </p>
-                  <p className="receipt-item-meta mt-1 text-[11px] text-slate-500 leading-5">
+                  </div>
+                  <div className="receipt-item-meta" style={{
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    color: '#000',
+                  }}>
                     {item.details}
-                  </p>
+                  </div>
                 </div>
                 {!isGift && (
-                  <span
-                    className="receipt-item-total min-w-[72px] text-left font-bold text-[12px] text-slate-950"
-                    dir="ltr"
-                  >
+                  <span className="receipt-item-total" dir="ltr" style={{
+                    minWidth: '55px',
+                    fontSize: '11px',
+                    fontWeight: '900',
+                    color: '#000',
+                    textAlign: 'left',
+                    whiteSpace: 'nowrap',
+                  }}>
                     {formatCurrency(item.total)} ج.م
                   </span>
                 )}
               </div>
             ))
           ) : (
-            <div className="py-3 text-center text-slate-500 text-xs">
+            <div style={{ padding: '6px 0', textAlign: 'center', fontSize: '11px', fontWeight: '700', color: '#000' }}>
               لا توجد أصناف في هذا الطلب
             </div>
           )}
         </div>
 
+        {/* ═══════ TOTALS ═══════ */}
         {!isGift && (
-          <div className="receipt-section receipt-total-box space-y-1 pt-1">
+          <div className="receipt-total-box" style={{
+            borderTop: '2px solid #000',
+            paddingTop: '4px',
+            marginTop: '2px',
+          }}>
             {totals
               .filter((item) => item.visible)
               .map((item) => (
-                <div
-                  key={item.label}
-                  className="receipt-row flex items-center justify-between gap-3 text-xs"
-                >
-                  <span className="receipt-label font-bold text-slate-600">
-                    {item.label}
-                  </span>
-                  <span className="receipt-value font-semibold text-slate-900" dir="ltr">
+                <div key={item.label} style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  fontSize: '11px',
+                  fontWeight: '700',
+                  color: '#000',
+                  marginBottom: '2px',
+                }}>
+                  <span>{item.label}:</span>
+                  <span dir="ltr">
                     {item.negative ? "-" : ""}
                     {formatCurrency(item.value)} ج.م
                   </span>
                 </div>
               ))}
 
-            <div className="receipt-grand-total flex items-center justify-between gap-3 pt-2 font-black text-slate-950 text-base">
-              <span>الإجمالي</span>
+            {/* ═══ GRAND TOTAL ═══ */}
+            <div className="receipt-grand-total" style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              fontSize: '16px',
+              fontWeight: '900',
+              color: '#000',
+              borderTop: '2px solid #000',
+              borderBottom: '2px solid #000',
+              padding: '5px 0',
+              marginTop: '3px',
+            }}>
+              <span>الإجمالي:</span>
               <span dir="ltr">{formatCurrency(order?.total)} ج.م</span>
             </div>
           </div>
         )}
 
+        {/* ═══════ NOTES ═══════ */}
         {order?.notes && (
-          <div className="receipt-section border-slate-200 border-t border-dashed pt-2">
-            <p className="mb-1 font-bold text-[11px] text-slate-700">ملاحظات</p>
-            <p className="receipt-note text-[11px] text-slate-600 leading-6 whitespace-pre-wrap">
+          <div style={{
+            borderTop: '1px dashed #000',
+            paddingTop: '4px',
+            marginTop: '4px',
+          }}>
+            <div style={{
+              fontSize: '11px',
+              fontWeight: '900',
+              color: '#000',
+              marginBottom: '2px',
+            }}>
+              ملاحظات:
+            </div>
+            <div className="receipt-note" style={{
+              fontSize: '10px',
+              fontWeight: '700',
+              color: '#000',
+              whiteSpace: 'pre-wrap',
+              textAlign: 'right',
+              lineHeight: '1.5',
+            }}>
               {order.notes}
-            </p>
+            </div>
           </div>
         )}
 
-        <div className="receipt-footer border-slate-200 border-t pt-3 text-center text-[11px] text-slate-500 leading-6">
-          <p className="font-bold text-slate-800">شكراً لزيارتكم</p>
-          <p>نتشرف بخدمتكم دائماً</p>
+        {/* ═══════ FOOTER ═══════ */}
+        <div className="receipt-footer" style={{
+          textAlign: 'center',
+          borderTop: '2px solid #000',
+          paddingTop: '6px',
+          marginTop: '6px',
+        }}>
+          <div style={{ fontSize: '13px', fontWeight: '900', color: '#000', marginBottom: '2px' }}>
+            شكراً لزيارتكم!
+          </div>
+          <div style={{ fontSize: '10px', fontWeight: '700', color: '#000' }}>
+            نتشرف بخدمتكم دائماً
+          </div>
+          <div style={{ fontSize: '10px', fontWeight: '700', color: '#000', marginTop: '4px', letterSpacing: '2px' }}>
+            ════════════════════
+          </div>
         </div>
       </div>
     </div>
@@ -583,7 +801,7 @@ const OrderReceiptDialog = ({ isOpen, onClose, orderData, autoPrint = false }) =
 
   useEffect(() => {
     if (isOpen && autoPrint && orderData) {
-      const timer = setTimeout(() => handlePrint(), 500);
+      const timer = setTimeout(() => handlePrint(), 600);
       return () => clearTimeout(timer);
     }
   }, [isOpen, autoPrint, orderData]);
