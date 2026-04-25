@@ -16,6 +16,8 @@ import FiltersCombonent from "../../../components/FiltersCombonent";
 import OrderReceiptDialog from "@/components/Order/OrderReceiptDialog";
 import OrderDetailsModal from "../../../components/Order/OrderDetailsModal";
 import axiosClient from "@/lib/axios-client";
+import { Edit } from "lucide-react";
+import EditOrderModal from "@/components/Order/EditOrderModal";
 
 const statuses = [
   { _id: "completed", name: "ناجح" },
@@ -56,6 +58,13 @@ export default function OrdersPage() {
     cancelledOrders: 0,
   });
 
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingOrder, setEditingOrder] = useState(null);
+  const [products, setProducts] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [scraps, setScraps] = useState([]);
+  const [servicesList, setServicesList] = useState([]);
+
   useEffect(() => {
     setUserRole(Cookies.get("role"));
   }, []);
@@ -85,6 +94,30 @@ export default function OrdersPage() {
       setIsLoading(false);
     }
   };
+
+  const fetchCatalogData = async () => {
+    try {
+      const [productsRes, suppliersRes, scrapsRes, servicesRes] = await Promise.all([
+        axiosClient.get("/products", { params: { limit: 1000 } }),
+        axiosClient.get("/suppliers", { params: { limit: 1000 } }),
+        axiosClient.get("/scraps", { params: { limit: 1000 } }),
+        axiosClient.get("/services", { params: { limit: 1000 } }),
+      ]);
+
+      setProducts(productsRes.data.data || []);
+      setSuppliers(suppliersRes.data.data || []);
+      setScraps(scrapsRes.data.data || []);
+      setServicesList(servicesRes.data.data || []);
+    } catch (error) {
+      console.error("Failed to fetch catalog data:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (userRole === "admin") {
+      fetchCatalogData();
+    }
+  }, [userRole]);
 
   useEffect(() => {
     fetchOrders();
@@ -117,6 +150,76 @@ export default function OrdersPage() {
         type: "error",
         message: "حدث خطأ أثناء تحميل تفاصيل الطلب",
       });
+    }
+  };
+
+  const handleEdit = async (orderId) => {
+    try {
+      setIsLoading(true);
+      const { data } = await axiosClient.get(`/orders/${orderId}`);
+      setEditingOrder(data.data);
+      setShowEditModal(true);
+    } catch (error) {
+      setMessage({
+        type: "error",
+        message: "حدث خطأ أثناء تحميل بيانات الطلب",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEditSubmit = async (values, { setSubmitting, resetForm }) => {
+    try {
+      setLoadingBtn(true);
+      const orderData = {
+        items: values.items.map((item) => ({
+          product: item.product,
+          size: item.size,
+          quantity: Number(item.quantity),
+          price: Number(item.price),
+        })),
+        scrapItems: values.scrapItems.map((item) => ({
+          product: item.product,
+          size: item.size,
+          quantity: Number(item.quantity),
+          price: Number(item.price),
+          refModel: item.refModel
+        })),
+        services: values.services.map((item) => ({
+          service: item.service,
+          quantity: Number(item.quantity),
+          price: Number(item.price),
+        })),
+        discount: {
+          value: Number(values.discount),
+          type: values.discountType,
+        },
+        shipping: Number(values.shipping),
+        priceDiff: Number(values.priceDiff || 0),
+        status: values.status,
+        paidAmount: Number(values.paidAmount || 0),
+        supplier: values.supplier || null,
+      };
+
+      const { data } = await axiosClient.put(`/orders/${editingOrder._id}`, orderData);
+
+      if (!data.success) {
+        throw new Error(data.message || "فشل تحديث الطلب");
+      }
+
+      setMessage({ type: "success", message: data.message || "تم تحديث الطلب بنجاح" });
+      setShowEditModal(false);
+      setEditingOrder(null);
+      setRefetch(!refetch);
+    } catch (error) {
+      setMessage({
+        type: "error",
+        message: error.response?.data?.message || error.message || "حدث خطأ أثناء تحديث الطلب",
+      });
+    } finally {
+      setLoadingBtn(false);
+      setSubmitting(false);
     }
   };
 
@@ -286,6 +389,12 @@ export default function OrdersPage() {
               action: (order) => setOrderDetailsId(order._id),
               props: { color: "green", variant: "filled", rounded: "2xl" },
             },
+            userRole === "admin" && {
+              label: null,
+              Icon: Edit,
+              action: (order) => handleEdit(order._id),
+              props: { color: "babyBlue", variant: "filled", rounded: "2xl" },
+            },
             {
               label: null,
               Icon: QrCode,
@@ -321,6 +430,19 @@ export default function OrdersPage() {
         isOpen={!!orderDetailsId}
         onClose={() => setOrderDetailsId(null)}
         orderId={orderDetailsId}
+      />
+
+      <EditOrderModal
+        loadingBtn={loadingBtn}
+        showModal={showEditModal}
+        setShowModal={setShowEditModal}
+        editingOrder={editingOrder}
+        handleSubmit={handleEditSubmit}
+        setEditingOrder={setEditingOrder}
+        products={products}
+        suppliers={suppliers}
+        scraps={scraps}
+        servicesList={servicesList}
       />
     </div>
   );
