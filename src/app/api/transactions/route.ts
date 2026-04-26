@@ -67,6 +67,74 @@ export async function GET(request: NextRequest) {
     if (createdBy) filter.createdBy = createdBy;
 
     const skip = (page - 1) * limit;
+
+    // Calculate stats for the filtered results
+    const stats = await Transaction.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: null,
+          totalIncome: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ["$type", "income"] },
+                    { $eq: ["$status", "completed"] },
+                  ],
+                },
+                "$amount",
+                {
+                  $cond: [
+                    {
+                      $and: [
+                        { $eq: ["$type", "payment"] },
+                        { $eq: ["$category", "adjustment"] },
+                        { $eq: ["$status", "completed"] },
+                      ],
+                    },
+                    { $multiply: ["$amount", -1] },
+                    0,
+                  ],
+                },
+              ],
+            },
+          },
+          totalExpenses: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ["$type", "payment"] },
+                    { $ne: ["$category", "adjustment"] },
+                    { $eq: ["$status", "completed"] },
+                  ],
+                },
+                "$amount",
+                0,
+              ],
+            },
+          },
+          totalCount: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const filteredStats =
+      stats.length > 0
+        ? {
+            totalIncome: stats[0].totalIncome,
+            totalExpenses: stats[0].totalExpenses,
+            netChange: stats[0].totalIncome - stats[0].totalExpenses,
+            totalCount: stats[0].totalCount,
+          }
+        : {
+            totalIncome: 0,
+            totalExpenses: 0,
+            netChange: 0,
+            totalCount: 0,
+          };
+
     const total = await Transaction.countDocuments(filter);
     const data = await Transaction.find(filter)
       .skip(skip)
@@ -78,6 +146,7 @@ export async function GET(request: NextRequest) {
       limit,
       total,
       pages: Math.ceil(total / limit),
+      stats: filteredStats,
     });
   } catch (error) {
     return handleError(error);

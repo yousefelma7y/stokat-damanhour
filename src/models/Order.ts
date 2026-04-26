@@ -43,6 +43,7 @@ export interface IOrder extends Omit<Document, "_id"> {
   status: "pending" | "completed" | "cancelled";
   order_type?: "regular" | "weight";
   paymentMethod?: string;
+  paymentMethodId?: number; // Ref to PaymentMethod
   notes?: string;
   isActive: boolean;
   createdBy?: string;
@@ -92,6 +93,7 @@ const OrderSchema = new Schema<IOrder>(
       default: "regular",
     },
     paymentMethod: { type: String, default: "cash" },
+    paymentMethodId: { type: Number, ref: "PaymentMethod" },
     notes: String,
     isActive: { type: Boolean, default: true },
     createdBy: String,

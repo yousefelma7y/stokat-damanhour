@@ -77,6 +77,7 @@ export const createOrderSchema = z
     status: z.enum(["pending", "completed", "cancelled"]).default("pending"),
     order_type: z.enum(["regular", "weight"]).default("regular"),
     paymentMethod: nullableString,
+    paymentMethodId: nullableNumber,
     notes: nullableString,
     priceDiff: nullableNumberDefault(0),
     orderNumber: nullableString,

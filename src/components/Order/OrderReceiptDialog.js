@@ -319,6 +319,11 @@ const getPaymentMethodLabel = (paymentMethod) =>
 const getOrderTitle = (orderType) =>
   orderType === "weight" ? "فاتورة وزن" : "فاتورة بيع";
 
+const formatWeightGrams = (weightKg) =>
+  new Intl.NumberFormat("ar-EG", {
+    maximumFractionDigits: 2,
+  }).format(Number(weightKg || 0) * 1000);
+
 const getReceiptItems = (order) => {
   const regularItems = (order?.items || []).map((item, index) => ({
     id: `item-${item?.product?._id || item?.product || index}`,
@@ -335,7 +340,7 @@ const getReceiptItems = (order) => {
   const weightItems = (order?.weightItems || []).map((item, index) => ({
     id: `weight-${item?.weightProduct?._id || item?.weightProduct || index}`,
     name: item?.weightProduct?.name || "صنف وزن",
-    details: `${item?.weight || 0} كجم × ${formatCurrency(item?.pricePerKg)} ج.م`,
+    details: `${formatWeightGrams(item?.weight)} جم × ${formatCurrency(item?.pricePerKg)} ج.م/كجم`,
     total: item?.total,
   }));
 

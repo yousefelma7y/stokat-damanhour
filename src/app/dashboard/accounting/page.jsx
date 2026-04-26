@@ -643,6 +643,59 @@ const DetailsModal = ({ isOpen, onClose, transaction }) => {
   );
 };
 
+const FilteredStatsSection = ({ stats, visible }) => {
+  if (!visible) return null;
+
+  return (
+    <div className="mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
+      <div className="flex items-center gap-2 mb-4">
+        <div className="h-8 w-1 bg-blue-600 rounded-full"></div>
+        <h2 className="font-bold text-slate-900 text-lg">تحليل النتائج المصفاة</h2>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white p-4 border border-slate-100 rounded-2xl shadow-sm hover:shadow-md transition-all border-r-4 border-r-blue-500">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-blue-50 rounded-xl">
+              <Activity className="w-4 h-4 text-blue-600" />
+            </div>
+            <span className="text-slate-500 text-xs font-bold">عدد العمليات</span>
+          </div>
+          <p className="text-xl font-black text-slate-900">{stats.totalCount}</p>
+        </div>
+        <div className="bg-white p-4 border border-slate-100 rounded-2xl shadow-sm hover:shadow-md transition-all border-r-4 border-r-emerald-500">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-emerald-50 rounded-xl">
+              <TrendingUp className="w-4 h-4 text-emerald-600" />
+            </div>
+            <span className="text-slate-500 text-xs font-bold">إجمالي التحصيل</span>
+          </div>
+          <p className="text-xl font-black text-emerald-600">{stats.totalIncome.toLocaleString()} EGP</p>
+        </div>
+        <div className="bg-white p-4 border border-slate-100 rounded-2xl shadow-sm hover:shadow-md transition-all border-r-4 border-r-red-500">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-red-50 rounded-xl">
+              <TrendingDown className="w-4 h-4 text-red-600" />
+            </div>
+            <span className="text-slate-500 text-xs font-bold">إجمالي الصرف</span>
+          </div>
+          <p className="text-xl font-black text-red-600">{stats.totalExpenses.toLocaleString()} EGP</p>
+        </div>
+        <div className="bg-white p-4 border border-slate-100 rounded-2xl shadow-sm hover:shadow-md transition-all border-r-4 border-r-indigo-500">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-indigo-50 rounded-xl">
+              <DollarSign className="w-4 h-4 text-indigo-600" />
+            </div>
+            <span className="text-slate-500 text-xs font-bold">صافي الحركة</span>
+          </div>
+          <p className={`text-xl font-black ${stats.netChange >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+            {stats.netChange.toLocaleString()} EGP
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ============ CONSTANTS ============
 const transactionTypes = [
   { _id: "income", name: "تحصيل" },
@@ -688,6 +741,13 @@ export default function AccountingSystem() {
     systemBalance: 0,
   });
 
+  const [filteredStats, setFilteredStats] = useState({
+    totalIncome: 0,
+    totalExpenses: 0,
+    netChange: 0,
+    totalCount: 0,
+  });
+
   const fetchData = async (isFilterChange = false) => {
     if (isFilterChange) {
       setIsFilterLoading(true);
@@ -717,6 +777,14 @@ export default function AccountingSystem() {
       setTransactions(txnRes.data.data);
       setTotalPages(txnRes.data.pages || 1);
       setTotal(txnRes.data.total || 0);
+      setFilteredStats(
+        txnRes.data.stats || {
+          totalIncome: 0,
+          totalExpenses: 0,
+          netChange: 0,
+          totalCount: 0,
+        },
+      );
       setSummary(statsRes.data.data.summary);
       setPaymentMethods(pmRes.data.data || []);
     } catch (error) {
@@ -891,6 +959,20 @@ export default function AccountingSystem() {
 
       {/* Main Content */}
       <div className="mx-auto px-6 py-8">
+        <FilteredStatsSection
+          stats={filteredStats}
+          visible={
+            !!(
+              searchTerm ||
+              filterStatus ||
+              paymentMethodId ||
+              startDate ||
+              endDate ||
+              type
+            )
+          }
+        />
+
         {/* Transactions Section */}
         <div>
           <div className="mb-2">
@@ -914,7 +996,7 @@ export default function AccountingSystem() {
                 }}
                 comboBoxes={[
                   {
-                    placeholder: "المحفظة",
+                    placeholder: "طريقة الدفع",
                     value: paymentMethodId,
                     onChange: setPaymentMethodId,
                     items: paymentMethods,

@@ -5,6 +5,7 @@ import Customer from "@/models/Customer";
 import Order from "@/models/Order";
 import Product from "@/models/Product";
 import Transaction from "@/models/Transaction";
+import PaymentMethod from "@/models/PaymentMethod";
 import WeightProduct from "@/models/WeightProduct";
 import { CreateOrderInput } from "@/validations/order.schema";
 
@@ -66,13 +67,20 @@ export class OrderService {
         data.orderNumber ||
         `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
+      let walletName = "cash";
+      if (data.paymentMethodId) {
+        const wallet = await PaymentMethod.findById(data.paymentMethodId).session(session);
+        if (wallet) walletName = wallet.name;
+      }
+
       const [order] = await Order.create(
         [
           {
             ...data,
             orderNumber,
             customer: customerId,
-            paymentMethod: "cash",
+            paymentMethod: walletName,
+            paymentMethodId: data.paymentMethodId || null,
             items: normalizedItems,
             weightItems: normalizedWeightItems,
             createdBy,
@@ -166,6 +174,14 @@ export class OrderService {
     systemAccount.totalCredits += order.total || 0;
     await systemAccount.save({ session });
 
+    if (order.paymentMethodId) {
+      const wallet = await PaymentMethod.findById(order.paymentMethodId).session(session);
+      if (wallet) {
+        wallet.balance += order.total || 0;
+        await wallet.save({ session });
+      }
+    }
+
     await Transaction.create(
       [
         {
@@ -177,11 +193,12 @@ export class OrderService {
           amount: order.total || 0,
           gain: totalGain,
           balanceAfter: systemAccount.currentBalance,
-          description: `اوردر رقم #${order._id} (cash)`,
+          description: `اوردر رقم #${order._id} (${order.paymentMethod})`,
           status: "completed",
           relatedModel: "Order",
           relatedId: order._id,
-          paymentMethod: "cash",
+          paymentMethod: order.paymentMethod,
+          paymentMethodId: order.paymentMethodId || null,
           createdBy,
         },
       ],

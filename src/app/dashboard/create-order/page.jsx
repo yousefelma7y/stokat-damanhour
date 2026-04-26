@@ -21,6 +21,12 @@ import Message from "@/components/Message";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import OrderReceiptDialog from "@/components/Order/OrderReceiptDialog";
 import axiosClient from "@/lib/axios-client";
+import PaymentMethodSelect from "@/components/PaymentMethodSelect";
+
+const gramsToKg = (grams) => Number(grams || 0) / 1000;
+const kgToGrams = (kg) => Number((Number(kg || 0) * 1000).toFixed(2));
+const formatGrams = (grams) =>
+  Number(grams || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 });
 
 function ProductGridCard({ product, cartQuantity, onAdd }) {
   const stock = Number(product.stock || 0);
@@ -63,10 +69,10 @@ function ProductGridCard({ product, cartQuantity, onAdd }) {
 }
 
 function WeightGridCard({ item, onAdd }) {
-  const [weight, setWeight] = useState("");
+  const [weightGrams, setWeightGrams] = useState("");
 
-  const parsedWeight = Number(weight || 0);
-  const total = parsedWeight > 0 ? parsedWeight * Number(item.pricePerKg || 0) : 0;
+  const parsedGrams = Number(weightGrams || 0);
+  const total = parsedGrams > 0 ? gramsToKg(parsedGrams) * Number(item.pricePerKg || 0) : 0;
 
   return (
     <div className="bg-white border border-emerald-200 rounded-2xl p-4 shadow-sm space-y-3">
@@ -82,11 +88,11 @@ function WeightGridCard({ item, onAdd }) {
 
       <input
         type="number"
-        min="0"
-        step="0.01"
-        value={weight}
-        onChange={(e) => setWeight(e.target.value)}
-        placeholder="أدخل الوزن بالكيلو"
+        min="1"
+        step="1"
+        value={weightGrams}
+        onChange={(e) => setWeightGrams(e.target.value)}
+        placeholder="أدخل الوزن بالجرام"
         className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-emerald-500"
       />
 
@@ -99,12 +105,12 @@ function WeightGridCard({ item, onAdd }) {
 
       <button
         onClick={() => {
-          onAdd(item, parsedWeight);
-          setWeight("");
+          onAdd(item, parsedGrams);
+          setWeightGrams("");
         }}
-        disabled={!parsedWeight}
+        disabled={!parsedGrams}
         className={`w-full rounded-xl py-2.5 text-sm font-bold transition-colors ${
-          !parsedWeight
+          !parsedGrams
             ? "bg-slate-200 text-slate-400 cursor-not-allowed"
             : "bg-emerald-600 text-white hover:bg-emerald-700"
         }`}
@@ -140,6 +146,7 @@ export default function CreateOrderPage() {
   const [message, setMessage] = useState(false);
   const [showReceiptDialog, setShowReceiptDialog] = useState(false);
   const [createdOrder, setCreatedOrder] = useState(null);
+  const [paymentMethodId, setPaymentMethodId] = useState(null);
 
   const [searchTermDebounced] = useDebounce(searchTerm, 400);
   const [customerPhoneDebounced] = useDebounce(customerPhone, 500);
@@ -331,11 +338,13 @@ export default function CreateOrderPage() {
     });
   };
 
-  const addWeightToCart = (weightProduct, weight) => {
-    if (!weight || weight <= 0) {
+  const addWeightToCart = (weightProduct, weightGrams) => {
+    if (!weightGrams || weightGrams <= 0) {
       setMessage({ type: "error", message: "أدخل وزن صحيح" });
       return;
     }
+
+    const weightKg = gramsToKg(weightGrams);
 
     setCart((current) => [
       ...current,
@@ -344,9 +353,10 @@ export default function CreateOrderPage() {
         sourceId: weightProduct._id,
         name: weightProduct.name,
         itemType: "weight",
-        weight,
+        weight: weightKg,
+        weightGrams,
         pricePerKg: Number(weightProduct.pricePerKg || 0),
-        total: Number(weightProduct.pricePerKg || 0) * weight,
+        total: Number(weightProduct.pricePerKg || 0) * weightKg,
       },
     ]);
   };
@@ -398,6 +408,7 @@ export default function CreateOrderPage() {
       name: item.weightProduct?.name || "صنف وزن",
       itemType: "weight",
       weight: item.weight,
+      weightGrams: kgToGrams(item.weight),
       pricePerKg: item.pricePerKg,
       total: item.total,
     }));
@@ -436,7 +447,7 @@ export default function CreateOrderPage() {
         .filter((item) => item.itemType === "weight")
         .map((item) => ({
           weightProduct: item.sourceId,
-          weight: Number(item.weight || 0),
+          weight: Number(item.weight || gramsToKg(item.weightGrams)),
           pricePerKg: Number(item.pricePerKg || 0),
           total: Number(item.total || 0),
         })),
@@ -449,7 +460,7 @@ export default function CreateOrderPage() {
       },
       shipping: 0,
       priceDiff: 0,
-      paymentMethod: "cash",
+      paymentMethodId,
       order_type: orderType === "weight" ? "weight" : "regular",
       status,
       notes,
@@ -680,65 +691,60 @@ export default function CreateOrderPage() {
                 )}
               </div>
 
-              <div className="flex-1 space-y-3 overflow-y-auto">
+              <div className="max-h-[350px] 2xl:max-h-[450px] overflow-y-auto border border-slate-200 rounded-xl bg-white shadow-sm custom-scrollbar">
                 {cart.length === 0 ? (
-                  <div className="text-center text-slate-400 py-12">العربة فارغة</div>
+                  <div className="text-center text-slate-400 py-12 text-sm font-medium">العربة فارغة</div>
                 ) : (
-                  cart.map((item) => (
-                    <div
-                      key={item._id}
-                      className="rounded-2xl border border-slate-200 p-3 space-y-3 bg-slate-50"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <h4 className="font-bold text-slate-900">{item.name}</h4>
-                          <p className="text-xs text-slate-500">
+                  <div className="divide-y divide-slate-100">
+                    {cart.map((item) => (
+                      <div
+                        key={item._id}
+                        className="flex items-center justify-between gap-2 p-2 hover:bg-slate-50 transition-colors group"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-bold text-[13px] text-slate-800 truncate" title={item.name}>{item.name}</h4>
+                          <p className="text-[11px] text-slate-500">
                             {item.itemType === "weight"
-                              ? `${item.weight} كجم × ${item.pricePerKg} ج.م`
-                              : `${item.quantity} × ${item.price} ج.م`}
+                              ? `${formatGrams(item.weightGrams ?? kgToGrams(item.weight))} جم × ${item.pricePerKg} ج.م/كجم`
+                              : `${item.price} ج.م`}
                           </p>
                         </div>
-                        <button
-                          onClick={() => removeCartItem(item._id)}
-                          className="p-1.5 rounded-full hover:bg-red-100 text-red-500"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
 
-                      {item.itemType === "regular" && (
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
+                        {item.itemType === "regular" && (
+                          <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
                             <button
                               onClick={() => updateRegularQuantity(item._id, -1)}
-                              className="w-8 h-8 rounded-full bg-white border border-slate-300 font-bold"
+                              className="w-6 h-6 flex items-center justify-center rounded-md bg-white shadow-sm text-slate-600 hover:text-red-500 font-bold"
                             >
                               -
                             </button>
-                            <span className="font-bold min-w-8 text-center">{item.quantity}</span>
+                            <span className="font-bold text-[13px] min-w-[20px] text-center">{item.quantity}</span>
                             <button
                               onClick={() => updateRegularQuantity(item._id, 1)}
-                              className="w-8 h-8 rounded-full bg-white border border-slate-300 font-bold"
+                              className="w-6 h-6 flex items-center justify-center rounded-md bg-white shadow-sm text-slate-600 hover:text-emerald-500 font-bold"
                             >
                               +
                             </button>
                           </div>
-                          <span className="font-bold text-emerald-700">
-                            {(item.quantity * item.price).toFixed(2)} ج.م
-                          </span>
-                        </div>
-                      )}
+                        )}
 
-                      {item.itemType === "weight" && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-slate-500">إجمالي الوزن</span>
-                          <span className="font-bold text-emerald-700">
-                            {Number(item.total || 0).toFixed(2)} ج.م
-                          </span>
+                        <div className="text-left min-w-[60px]">
+                          <p className="font-bold text-emerald-700 text-[13px]">
+                            {item.itemType === "regular"
+                              ? (item.quantity * item.price).toFixed(2)
+                              : Number(item.total || 0).toFixed(2)}
+                          </p>
                         </div>
-                      )}
-                    </div>
-                  ))
+
+                        <button
+                          onClick={() => removeCartItem(item._id)}
+                          className="p-1.5 rounded-md text-slate-300 hover:bg-red-50 hover:text-red-500 transition-colors"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
 
@@ -794,9 +800,12 @@ export default function CreateOrderPage() {
                   />
                 </div>
 
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-500">الدفع</span>
-                  <span className="font-bold text-slate-900">كاش</span>
+                <div className="border-t border-slate-100 pt-3 pb-1">
+                  <PaymentMethodSelect 
+                    value={paymentMethodId} 
+                    onChange={setPaymentMethodId} 
+                    label="طريقة الدفع"
+                  />
                 </div>
 
                 <div className="flex items-center justify-between text-sm">

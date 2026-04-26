@@ -28,6 +28,11 @@ const STATUS_MAP = {
   cancelled: { label: "ملغي", color: "bg-red-100 text-red-800", Icon: XCircle },
 };
 
+const formatWeightGrams = (weightKg) =>
+  Number(Number(weightKg || 0) * 1000).toLocaleString("ar-EG", {
+    maximumFractionDigits: 2,
+  });
+
 const OrderDetailsModal = ({ isOpen, onClose, orderId }) => {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -173,7 +178,7 @@ const OrderDetailsModal = ({ isOpen, onClose, orderId }) => {
                       <thead className="bg-emerald-50/50 text-emerald-700">
                         <tr>
                           <th className="px-4 py-2.5 text-right font-medium">الصنف</th>
-                          <th className="px-4 py-2.5 text-center font-medium">الوزن</th>
+                          <th className="px-4 py-2.5 text-center font-medium">الوزن بالجرام</th>
                           <th className="px-4 py-2.5 text-center font-medium">سعر الكيلو</th>
                           <th className="px-4 py-2.5 text-center font-medium">الإجمالي</th>
                         </tr>
@@ -182,7 +187,7 @@ const OrderDetailsModal = ({ isOpen, onClose, orderId }) => {
                         {order.weightItems.map((item, idx) => (
                           <tr key={idx}>
                             <td className="px-4 py-3">{item.weightProduct?.name || `صنف #${item.weightProduct}`}</td>
-                            <td className="px-4 py-3 text-center">{item.weight} كجم</td>
+                            <td className="px-4 py-3 text-center">{formatWeightGrams(item.weight)} جم</td>
                             <td className="px-4 py-3 text-center">{(item.pricePerKg || 0).toLocaleString()} EGP</td>
                             <td className="px-4 py-3 text-center font-bold">{(item.total || 0).toLocaleString()} EGP</td>
                           </tr>
@@ -213,7 +218,7 @@ const OrderDetailsModal = ({ isOpen, onClose, orderId }) => {
                   )}
                   <div className="flex justify-between items-center">
                     <span className="text-slate-600">الدفع:</span>
-                    <span className="font-medium text-slate-800">كاش</span>
+                    <span className="font-medium text-slate-800">{order.paymentMethod || "كاش"}</span>
                   </div>
                   <div className="flex justify-between items-center pt-2 mt-2 border-t border-slate-300">
                     <span className="font-bold text-slate-900">الإجمالي:</span>

@@ -5,6 +5,8 @@ import { Formik, Form, Field, FieldArray } from "formik";
 import * as Yup from "yup";
 import { Plus, Trash2 } from "lucide-react";
 
+const kgToGrams = (kg) => Number((Number(kg || 0) * 1000).toFixed(2));
+
 const EditOrderModal = ({
     showModal,
     setShowModal,
@@ -12,14 +14,14 @@ const EditOrderModal = ({
     handleSubmit,
     setEditingOrder,
     products = [],
+    weightProducts = [],
+    paymentMethods = [],
     suppliers = [],
     scraps = [], // Added scraps
     servicesList = [], // Added services
     loadingBtn = false
 }) => {
     const [open, setOpen] = useState(false);
-
-    console.log(editingOrder)
 
     useEffect(() => {
         if (showModal) {
@@ -61,12 +63,26 @@ const EditOrderModal = ({
                         quantity: item.quantity || 1,
                         price: item.price || 0,
                     })) || [],
+                    weightItems: editingOrder?.weightItems?.map(item => {
+                        const weightProductId = item.weightProduct?._id || item.weightProduct;
+                        const relatedWeightProduct = weightProducts.find(
+                            (product) => String(product._id) === String(weightProductId)
+                        );
+
+                        return {
+                            weightProduct: weightProductId || "",
+                            weightProductName: item.weightProduct?.name || relatedWeightProduct?.name || "",
+                            weight: kgToGrams(item.weight),
+                            pricePerKg: item.pricePerKg || relatedWeightProduct?.pricePerKg || 0,
+                        };
+                    }) || [],
                     discount: editingOrder?.discount?.value || 0,
                     discountType: editingOrder?.discount?.type || "percentage",
                     shipping: editingOrder?.shipping || 0,
                     priceDiff: editingOrder?.priceDiff || 0,
                     status: editingOrder?.status || "pending",
                     paidAmount: editingOrder?.paidAmount || 0,
+                    paymentMethodId: editingOrder?.paymentMethodId?._id || editingOrder?.paymentMethodId || "",
                     supplier: editingOrder?.supplier?._id || editingOrder?.supplier || "",
                     order_type: editingOrder?.order_type || "regular",
                     scrapItems: editingOrder?.scrapItems?.map(item => {
@@ -96,11 +112,22 @@ const EditOrderModal = ({
                             Yup.object({
                                 product: Yup.string().required("المنتج مطلوب"),
                                 quantity: Yup.number()
-                                    .min(1, "الكمية يجب أن تكون 1 على الأقل")
                                     .required("الكمية مطلوبة"),
                                 price: Yup.number()
                                     .min(0, "السعر يجب أن يكون صفر أو أكبر")
                                     .required("السعر مطلوب"),
+                            })
+                        ),
+                    weightItems: Yup.array()
+                        .of(
+                            Yup.object({
+                                weightProduct: Yup.string().required("صنف الوزن مطلوب"),
+                                weight: Yup.number()
+                                    .positive("الوزن يجب أن يكون أكبر من صفر")
+                                    .required("الوزن مطلوب"),
+                                pricePerKg: Yup.number()
+                                    .min(0, "سعر الكيلو يجب أن يكون صفر أو أكبر")
+                                    .required("سعر الكيلو مطلوب"),
                             })
                         ),
                     services: Yup.array()
@@ -108,7 +135,6 @@ const EditOrderModal = ({
                             Yup.object({
                                 service: Yup.string().required("الخدمة مطلوبة"),
                                 quantity: Yup.number()
-                                    .min(1, "الكمية يجب أن تكون 1 على الأقل")
                                     .required("الكمية مطلوبة"),
                                 price: Yup.number()
                                     .min(0, "السعر يجب أن يكون صفر أو أكبر")
@@ -118,12 +144,13 @@ const EditOrderModal = ({
                     scrapItems: Yup.array().of(
                         Yup.object({
                             product: Yup.string().required("المنتج مطلوب"),
-                            quantity: Yup.number().min(1, "الكمية يجب أن تكون 1 على الأقل").required("الكمية مطلوبة"),
+                            quantity: Yup.number().required("الكمية مطلوبة"),
                         })
                     ),
                     discount: Yup.number().min(0, "الخصم يجب أن يكون صفر أو أكبر"),
                     shipping: Yup.number().min(0, "الشحن يجب أن يكون صفر أو أكبر"),
                     status: Yup.string().required("حالة الطلب مطلوبة"),
+                    paymentMethodId: Yup.string(),
                     paidAmount: Yup.number().min(0, "المبلغ المدفوع يجب أن يكون صفر أو أكبر"),
                     supplier: Yup.string().when("order_type", {
                         is: "delayed",
@@ -141,11 +168,15 @@ const EditOrderModal = ({
                         return sum + (Number(item.price) * Number(item.quantity));
                     }, 0);
 
+                    const weightSubtotal = (values.weightItems || []).reduce((sum, item) => {
+                        return sum + (Number(item.pricePerKg) * (Number(item.weight) / 1000));
+                    }, 0);
+
                     const servicesSubtotal = (values.services || []).reduce((sum, item) => {
                         return sum + (Number(item.price) * Number(item.quantity));
                     }, 0);
 
-                    const subtotal = itemsSubtotal + servicesSubtotal;
+                    const subtotal = itemsSubtotal + weightSubtotal + servicesSubtotal;
 
                     // Calculate discount amount
                     const discountAmount =
@@ -158,7 +189,8 @@ const EditOrderModal = ({
                     // Calculate total
                     const total = Math.max(0, subtotal - discountAmount + Number(values.shipping) + priceDiffValue);
 
-                    const isEditable = (editingOrder?.order_type === "regular" || editingOrder?.order_type === "delayed");
+                    const isWeightOrder = values.order_type === "weight";
+                    const isEditable = ["regular", "weight", "delayed"].includes(values.order_type);
 
                     return (
                         <Form className="space-y-4 ">
@@ -174,7 +206,7 @@ const EditOrderModal = ({
                                                 اسم العميل
                                             </label>
                                             <div className="bg-gray-100 px-4 py-2 rounded-lg text-gray-700">
-                                                {editingOrder?.customer?.name}
+                                                {editingOrder?.customer?.name || "عميل نقدي"}
                                             </div>
                                         </div>
                                         <div>
@@ -185,7 +217,7 @@ const EditOrderModal = ({
                                                 className="bg-gray-100 px-4 py-2 rounded-lg text-gray-700 font-medium"
                                                 dir="ltr"
                                             >
-                                                {editingOrder?.customer?.phone}
+                                                {editingOrder?.customer?.phone || "-"}
                                             </div>
                                         </div>
                                         {/* <div>
@@ -208,7 +240,7 @@ const EditOrderModal = ({
                                 </div>
 
                                 {/* Editable Items Section */}
-                                {editingOrder?.order_type != "service" && <FieldArray name="items">
+                                {!isWeightOrder && editingOrder?.order_type != "service" && <FieldArray name="items">
                                     {({ push, remove }) => (
                                         <div className="space-y-4 bg-gray-50 p-4 rounded-lg">
                                             <div className="flex justify-between items-center">
@@ -294,6 +326,11 @@ const EditOrderModal = ({
                                                                         }}
                                                                     >
                                                                         <option value="">اختر منتج</option>
+                                                                        {item.product && !products.some((product) => String(product._id) === String(item.product)) && (
+                                                                            <option value={item.product}>
+                                                                                {item.productName || `منتج #${item.product}`}
+                                                                            </option>
+                                                                        )}
                                                                         {products.map((product) => (
                                                                             <option key={product._id} value={product._id}>
                                                                                 {product.name} - {product.color} - {product.price} EGP
@@ -368,6 +405,157 @@ const EditOrderModal = ({
 
                                             {typeof errors.items === 'string' && (
                                                 <div className="mt-2 text-red-500 text-sm">{errors.items}</div>
+                                            )}
+                                        </div>
+                                    )}
+                                </FieldArray>}
+
+                                {/* Editable Weight Items Section */}
+                                {isWeightOrder && <FieldArray name="weightItems">
+                                    {({ push, remove }) => (
+                                        <div className="space-y-4 bg-emerald-50 p-4 rounded-lg">
+                                            <div className="flex justify-between items-center">
+                                                <h3 className="font-semibold text-emerald-900 text-lg">
+                                                    أصناف الوزن
+                                                </h3>
+                                                {isEditable && <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        push({
+                                                            weightProduct: "",
+                                                            weightProductName: "",
+                                                            weight: 0,
+                                                            pricePerKg: 0,
+                                                        })
+                                                    }
+                                                    className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 rounded-lg text-white text-sm transition-colors"
+                                                >
+                                                    <Plus size={16} />
+                                                    إضافة صنف وزن
+                                                </button>}
+                                            </div>
+
+                                            {values.weightItems.length === 0 ? (
+                                                <div className="bg-white p-8 border border-emerald-200 rounded-lg text-center">
+                                                    <p className="text-gray-500">
+                                                        لا توجد أصناف وزن في هذا الطلب
+                                                    </p>
+                                                    <p className="mt-1 text-gray-400 text-sm">
+                                                        اضغط على "إضافة صنف وزن" لإضافة صنف
+                                                    </p>
+                                                </div>
+                                            ) : (
+                                                values.weightItems.map((item, index) => (
+                                                    <div
+                                                        key={index}
+                                                        className="space-y-3 bg-white p-4 border border-emerald-200 rounded-lg"
+                                                    >
+                                                        <div className="flex justify-between items-center mb-2">
+                                                            <span className="font-medium text-emerald-700">
+                                                                صنف وزن {index + 1}
+                                                            </span>
+                                                            {isEditable && <button
+                                                                type="button"
+                                                                onClick={() => remove(index)}
+                                                                className="flex items-center gap-1 text-red-500 hover:text-red-700 transition-colors"
+                                                            >
+                                                                <Trash2 size={18} />
+                                                                <span className="text-sm">حذف</span>
+                                                            </button>}
+                                                        </div>
+
+                                                        <div className="gap-3 grid grid-cols-1">
+                                                            <div>
+                                                                <label className="block mb-1 text-gray-700 text-sm font-medium">
+                                                                    صنف الوزن *
+                                                                </label>
+                                                                <Field
+                                                                    disabled={!isEditable}
+                                                                    as="select"
+                                                                    name={`weightItems.${index}.weightProduct`}
+                                                                    className="px-3 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 w-full"
+                                                                    onChange={(e) => {
+                                                                        const selectedProductId = e.target.value;
+                                                                        const selectedProduct = weightProducts.find(
+                                                                            (product) => String(product._id) === String(selectedProductId)
+                                                                        );
+
+                                                                        setFieldValue(`weightItems.${index}.weightProduct`, selectedProductId);
+
+                                                                        if (selectedProduct) {
+                                                                            setFieldValue(`weightItems.${index}.weightProductName`, selectedProduct.name);
+                                                                            setFieldValue(`weightItems.${index}.pricePerKg`, selectedProduct.pricePerKg || 0);
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    <option value="">اختر صنف وزن</option>
+                                                                    {item.weightProduct && !weightProducts.some((product) => String(product._id) === String(item.weightProduct)) && (
+                                                                        <option value={item.weightProduct}>
+                                                                            {item.weightProductName || `صنف وزن #${item.weightProduct}`}
+                                                                        </option>
+                                                                    )}
+                                                                    {weightProducts.map((product) => (
+                                                                        <option key={product._id} value={product._id}>
+                                                                            {product.name} - {product.pricePerKg} EGP / كجم
+                                                                        </option>
+                                                                    ))}
+                                                                </Field>
+                                                                {errors?.weightItems?.[index]?.weightProduct && touched?.weightItems?.[index]?.weightProduct && (
+                                                                    <div className="mt-1 text-red-500 text-xs">
+                                                                        {errors.weightItems[index].weightProduct}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+
+                                                            <div className="gap-3 grid grid-cols-2">
+                                                                <div>
+                                                                    <label className="block mb-1 text-gray-700 text-sm font-medium">
+                                                                        الوزن بالجرام *
+                                                                    </label>
+                                                                    <Field
+                                                                        disabled={!isEditable}
+                                                                        type="number"
+                                                                        name={`weightItems.${index}.weight`}
+                                                                        min="1"
+                                                                        step="1"
+                                                                        className="px-3 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 w-full"
+                                                                    />
+                                                                    {errors?.weightItems?.[index]?.weight && touched?.weightItems?.[index]?.weight && (
+                                                                        <div className="mt-1 text-red-500 text-xs">
+                                                                            {errors.weightItems[index].weight}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+
+                                                                <div>
+                                                                    <label className="block mb-1 text-gray-700 text-sm font-medium">
+                                                                        سعر الكيلو *
+                                                                    </label>
+                                                                    <Field
+                                                                        disabled={!isEditable}
+                                                                        type="number"
+                                                                        name={`weightItems.${index}.pricePerKg`}
+                                                                        min="0"
+                                                                        step="0.01"
+                                                                        className="px-3 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 w-full"
+                                                                    />
+                                                                    {errors?.weightItems?.[index]?.pricePerKg && touched?.weightItems?.[index]?.pricePerKg && (
+                                                                        <div className="mt-1 text-red-500 text-xs">
+                                                                            {errors.weightItems[index].pricePerKg}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="bg-emerald-50 px-3 py-2 rounded border border-emerald-200">
+                                                                <span className="text-gray-600 text-sm">المجموع: </span>
+                                                                <span className="font-medium text-emerald-900">
+                                                                    {(Number(item.pricePerKg) * (Number(item.weight) / 1000)).toFixed(2)} EGP
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))
                                             )}
                                         </div>
                                     )}
@@ -672,37 +860,6 @@ const EditOrderModal = ({
 
                                         <div>
                                             <label className="block mb-2 font-medium text-gray-700 text-sm">
-                                                الشحن (EGP)
-                                            </label>
-                                            <Field
-                                                type="number"
-                                                name="shipping"
-                                                min="0"
-                                                step="0.01"
-                                                className="px-4 py-1 border !h-11 border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 w-full"
-                                            />
-                                            {errors.shipping && touched.shipping && (
-                                                <div className="mt-1 text-red-500 text-xs">{errors.shipping}</div>
-                                            )}
-                                        </div>
-
-                                        <div>
-                                            <label className="block mb-2 font-medium text-gray-700 text-sm">
-                                                فرق مقاس (EGP)
-                                            </label>
-                                            <Field
-                                                type="number"
-                                                name="priceDiff"
-                                                step="0.01"
-                                                className="px-4 py-1 border !h-11 border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 w-full"
-                                            />
-                                            {errors.priceDiff && touched.priceDiff && (
-                                                <div className="mt-1 text-red-500 text-xs">{errors.priceDiff}</div>
-                                            )}
-                                        </div>
-
-                                        <div>
-                                            <label className="block mb-2 font-medium text-gray-700 text-sm">
                                                 حالة الطلب *
                                             </label>
                                             <Field
@@ -715,6 +872,26 @@ const EditOrderModal = ({
                                                 <option value="cancelled">ملغي</option>
                                             </Field>
                                         </div>
+
+                                        {paymentMethods.length > 0 && (
+                                            <div>
+                                                <label className="block mb-2 font-medium text-gray-700 text-sm">
+                                                    وسيلة الدفع
+                                                </label>
+                                                <Field
+                                                    as="select"
+                                                    name="paymentMethodId"
+                                                    className="px-4 py-1 border !h-11 border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 w-full"
+                                                >
+                                                    <option value="">كاش / بدون محفظة</option>
+                                                    {paymentMethods.map((method) => (
+                                                        <option key={method._id} value={method._id}>
+                                                            {method.name}
+                                                        </option>
+                                                    ))}
+                                                </Field>
+                                            </div>
+                                        )}
 
                                         {/* Delayed Order Specific Fields */}
                                         {editingOrder?.order_type === "delayed" && (
@@ -775,21 +952,6 @@ const EditOrderModal = ({
                                                     -{discountAmount.toFixed(2)} EGP
                                                 </span>
                                             </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-gray-600">الشحن:</span>
-                                                <span className="font-medium">
-                                                    +{Number(values.shipping).toFixed(2)} EGP
-                                                </span>
-                                            </div>
-                                            {priceDiffValue !== 0 && (
-                                                <div className="flex justify-between">
-                                                    <span className="text-gray-600">فرق مقاس:</span>
-                                                    <span className={`font-medium ${priceDiffValue > 0 ? "text-blue-600" : "text-red-600"}`}>
-                                                        {priceDiffValue > 0 ? "+" : ""}
-                                                        {priceDiffValue.toFixed(2)} EGP
-                                                    </span>
-                                                </div>
-                                            )}
                                             <div className="flex justify-between pt-2 border-gray-300 border-t">
                                                 <span className="font-semibold text-gray-900">
                                                     الإجمالي:

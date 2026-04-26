@@ -30,6 +30,19 @@ const orderTypes = [
   { _id: "weight", name: "وزن" },
 ];
 
+const PAYMENT_METHOD_LABELS = {
+  cash: "كاش",
+  bank: "فيزا",
+  card: "بطاقة",
+  transfer: "تحويل",
+  wallet: "محفظة",
+  mixed: "مختلط",
+};
+
+const kgToGrams = (kg) => Number((Number(kg || 0) * 1000).toFixed(2));
+const formatGrams = (grams) =>
+  Number(grams || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 });
+
 export default function OrdersPage() {
   const [userRole, setUserRole] = useState(null);
   const [orders, setOrders] = useState([]);
@@ -45,6 +58,7 @@ export default function OrdersPage() {
   const [searchValue] = useDebounce(search, 1000);
   const [status, setStatus] = useState(null);
   const [orderType, setOrderType] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState(null);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -60,10 +74,13 @@ export default function OrdersPage() {
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingOrder, setEditingOrder] = useState(null);
+  const [isEditLoading, setIsEditLoading] = useState(false);
   const [products, setProducts] = useState([]);
+  const [weightProducts, setWeightProducts] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [scraps, setScraps] = useState([]);
   const [servicesList, setServicesList] = useState([]);
+  const [paymentMethodsList, setPaymentMethodsList] = useState([]);
 
   useEffect(() => {
     setUserRole(Cookies.get("role"));
@@ -75,6 +92,7 @@ export default function OrdersPage() {
       const params = { page, limit, search: searchValue };
       if (status) params.status = status;
       if (orderType) params.orderType = orderType;
+      if (paymentMethod) params.paymentMethod = paymentMethod;
       if (startDate) params.startDate = startDate;
       if (endDate) params.endDate = endDate;
 
@@ -97,17 +115,21 @@ export default function OrdersPage() {
 
   const fetchCatalogData = async () => {
     try {
-      const [productsRes, suppliersRes, scrapsRes, servicesRes] = await Promise.all([
+      const [productsRes, weightProductsRes, suppliersRes, scrapsRes, servicesRes, pmRes] = await Promise.all([
         axiosClient.get("/products", { params: { limit: 1000 } }),
+        axiosClient.get("/weight-products", { params: { limit: 1000 } }),
         axiosClient.get("/suppliers", { params: { limit: 1000 } }),
         axiosClient.get("/scraps", { params: { limit: 1000 } }),
         axiosClient.get("/services", { params: { limit: 1000 } }),
+        axiosClient.get("/payment-methods"),
       ]);
 
       setProducts(productsRes.data.data || []);
+      setWeightProducts(weightProductsRes.data.data || []);
       setSuppliers(suppliersRes.data.data || []);
       setScraps(scrapsRes.data.data || []);
       setServicesList(servicesRes.data.data || []);
+      setPaymentMethodsList(pmRes.data.data || []);
     } catch (error) {
       console.error("Failed to fetch catalog data:", error);
     }
@@ -121,7 +143,7 @@ export default function OrdersPage() {
 
   useEffect(() => {
     fetchOrders();
-  }, [page, limit, searchValue, status, orderType, startDate, endDate, refetch]);
+  }, [page, limit, searchValue, status, orderType, paymentMethod, startDate, endDate, refetch]);
 
   const handleDelete = async () => {
     try {
@@ -155,7 +177,7 @@ export default function OrdersPage() {
 
   const handleEdit = async (orderId) => {
     try {
-      setIsLoading(true);
+      setIsEditLoading(true);
       const { data } = await axiosClient.get(`/orders/${orderId}`);
       setEditingOrder(data.data);
       setShowEditModal(true);
@@ -165,20 +187,31 @@ export default function OrdersPage() {
         message: "حدث خطأ أثناء تحميل بيانات الطلب",
       });
     } finally {
-      setIsLoading(false);
+      setIsEditLoading(false);
     }
   };
 
   const handleEditSubmit = async (values, { setSubmitting, resetForm }) => {
     try {
       setLoadingBtn(true);
+      const isWeightOrder = values.order_type === "weight";
       const orderData = {
-        items: values.items.map((item) => ({
-          product: item.product,
-          size: item.size,
-          quantity: Number(item.quantity),
-          price: Number(item.price),
-        })),
+        order_type: values.order_type,
+        items: isWeightOrder
+          ? []
+          : values.items.map((item) => ({
+            product: Number(item.product),
+            size: item.size,
+            quantity: Number(item.quantity),
+            price: Number(item.price),
+          })),
+        weightItems: isWeightOrder
+          ? values.weightItems.map((item) => ({
+            weightProduct: Number(item.weightProduct),
+            weight: Number(item.weight) / 1000,
+            pricePerKg: Number(item.pricePerKg),
+          }))
+          : [],
         scrapItems: values.scrapItems.map((item) => ({
           product: item.product,
           size: item.size,
@@ -198,6 +231,7 @@ export default function OrdersPage() {
         shipping: Number(values.shipping),
         priceDiff: Number(values.priceDiff || 0),
         status: values.status,
+        paymentMethodId: values.paymentMethodId ? Number(values.paymentMethodId) : null,
         paidAmount: Number(values.paidAmount || 0),
         supplier: values.supplier || null,
       };
@@ -224,17 +258,22 @@ export default function OrdersPage() {
   };
 
   const rows = orders.map((order) => {
-    const itemsQty =
-      (order.items || []).reduce((sum, item) => sum + (item.quantity || 0), 0) +
-      (order.weightItems || []).reduce((sum, item) => sum + (item.weight || 0), 0);
+    const regularItemsQty = (order.items || []).reduce(
+      (sum, item) => sum + (item.quantity || 0),
+      0,
+    );
+    const weightItemsGrams = (order.weightItems || []).reduce(
+      (sum, item) => sum + kgToGrams(item.weight || 0),
+      0,
+    );
 
     return {
       _id: order._id,
       name: order.customer?.name || "عميل نقدي",
       itemsQty:
         order.order_type === "weight"
-          ? `${itemsQty.toFixed ? itemsQty.toFixed(2) : itemsQty} كجم`
-          : itemsQty,
+          ? `${formatGrams(weightItemsGrams)} جم`
+          : regularItemsQty,
       total: (
         <NumericFormat
           value={order.total || 0}
@@ -271,7 +310,7 @@ export default function OrdersPage() {
               : "ملغي"}
         </span>
       ),
-      paymentMethod: "كاش",
+      paymentMethod: PAYMENT_METHOD_LABELS[order.paymentMethod] || order.paymentMethod || "كاش",
       date: new Date(order.createdAt).toLocaleDateString("ar-EG", {
         year: "numeric",
         month: "2-digit",
@@ -373,6 +412,13 @@ export default function OrdersPage() {
             items: orderTypes,
             byId: true,
           },
+          {
+            placeholder: "وسيلة الدفع",
+            value: paymentMethod,
+            onChange: setPaymentMethod,
+            items: paymentMethodsList,
+            byId: true,
+          },
         ]}
       />
 
@@ -382,6 +428,7 @@ export default function OrdersPage() {
         <ContentTable
           data={rows}
           nodata="طلبات"
+          actionsLoading={isEditLoading || loadingBtn}
           actions={[
             {
               label: null,
@@ -440,6 +487,8 @@ export default function OrdersPage() {
         handleSubmit={handleEditSubmit}
         setEditingOrder={setEditingOrder}
         products={products}
+        weightProducts={weightProducts}
+        paymentMethods={paymentMethodsList}
         suppliers={suppliers}
         scraps={scraps}
         servicesList={servicesList}

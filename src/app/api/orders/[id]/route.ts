@@ -3,6 +3,7 @@ import Account from "@/models/Account";
 import Activity from "@/models/Activity";
 import Customer from "@/models/Customer";
 import Order from "@/models/Order";
+import PaymentMethod from "@/models/PaymentMethod";
 import Product from "@/models/Product";
 import Transaction from "@/models/Transaction";
 import WeightProduct from "@/models/WeightProduct";
@@ -23,6 +24,49 @@ function populateOrder(query: any) {
     .populate("customer", "name phone location")
     .populate("items.product", "name model size price stock")
     .populate("weightItems.weightProduct", "name pricePerKg");
+}
+
+function hasBodyField(body: any, field: string) {
+  return Object.prototype.hasOwnProperty.call(body, field);
+}
+
+function getRefId(value: any) {
+  if (value && typeof value === "object") {
+    return value._id ?? value.id ?? value;
+  }
+
+  return value;
+}
+
+function normalizeProductItems(items: any[] = []) {
+  return items.map((item: any) => {
+    const product = getRefId(item.product);
+    const quantity = Number(item.quantity || 0);
+    const price = Number(item.price || 0);
+
+    return {
+      product: Number(product),
+      size: item.size || "",
+      quantity,
+      price,
+      total: quantity * price,
+    };
+  });
+}
+
+function normalizeWeightItems(items: any[] = []) {
+  return items.map((item: any) => {
+    const weightProduct = getRefId(item.weightProduct);
+    const weight = Number(item.weight || 0);
+    const pricePerKg = Number(item.pricePerKg || 0);
+
+    return {
+      weightProduct: Number(weightProduct),
+      weight,
+      pricePerKg,
+      total: weight * pricePerKg,
+    };
+  });
 }
 
 async function revertOrderEffects(order: any, currentUser: string) {
@@ -181,25 +225,47 @@ export async function PUT(
       }
     }
 
-    const items = (body.items || []).map((item: any) => ({
-      ...item,
-      quantity: Number(item.quantity || 0),
-      price: Number(item.price || 0),
-      total: Number(item.quantity || 0) * Number(item.price || 0),
-    }));
+    const rawItems = hasBodyField(body, "items")
+      ? body.items || []
+      : oldOrder.items || [];
+    const rawWeightItems = hasBodyField(body, "weightItems")
+      ? body.weightItems || []
+      : oldOrder.weightItems || [];
+    const items = normalizeProductItems(rawItems);
+    const weightItems = normalizeWeightItems(rawWeightItems);
+    const nextStatus = body.status || oldOrder.status || "pending";
+    const nextOrderType =
+      body.order_type ||
+      oldOrder.order_type ||
+      (weightItems.length > 0 ? "weight" : "regular");
 
-    const weightItems = (body.weightItems || []).map((item: any) => ({
-      ...item,
-      weight: Number(item.weight || 0),
-      pricePerKg: Number(item.pricePerKg || 0),
-      total: Number(item.weight || 0) * Number(item.pricePerKg || 0),
-    }));
-
-    for (const item of items) {
-      const product = await Product.findById(item.product);
-      if (!product || product.stock < item.quantity) {
+    if (nextStatus !== "cancelled") {
+      if (nextOrderType === "regular" && items.length === 0) {
         await applyOrderEffects(oldOrder, currentUser);
-        return errorResponse(`لا يوجد مخزون كافٍ للمنتج "${product?.name || item.product}"`, 400);
+        return errorResponse("طلب المنتجات يجب أن يحتوي على منتج واحد على الأقل", 400);
+      }
+
+      if (nextOrderType === "weight" && weightItems.length === 0) {
+        await applyOrderEffects(oldOrder, currentUser);
+        return errorResponse("طلب الوزن يجب أن يحتوي على صنف وزن واحد على الأقل", 400);
+      }
+    }
+
+    if (nextStatus === "completed") {
+      for (const item of items) {
+        const product = await Product.findById(item.product);
+        if (!product || product.stock < item.quantity) {
+          await applyOrderEffects(oldOrder, currentUser);
+          return errorResponse(`لا يوجد مخزون كافٍ للمنتج "${product?.name || item.product}"`, 400);
+        }
+      }
+
+      for (const item of weightItems) {
+        const weightProduct = await WeightProduct.findById(item.weightProduct);
+        if (!weightProduct) {
+          await applyOrderEffects(oldOrder, currentUser);
+          return errorResponse(`صنف الوزن غير موجود "${item.weightProduct}"`, 400);
+        }
       }
     }
 
@@ -213,20 +279,44 @@ export async function PUT(
         0,
       );
 
-    const discountType = body.discount?.type || "fixed";
-    const discountValue = Number(body.discount?.value || 0);
+    const previousDiscount = oldOrder.discount || {};
+    const discountType = body.discount?.type ?? previousDiscount.type ?? "fixed";
+    const discountValue = Number(body.discount?.value ?? previousDiscount.value ?? 0);
     const discountAmount =
       discountType === "percentage"
         ? (subtotal * discountValue) / 100
         : discountValue;
-    const shipping = Number(body.shipping || 0);
-    const priceDiff = Number(body.priceDiff || 0);
+    const shipping = Number(body.shipping ?? oldOrder.shipping ?? 0);
+    const priceDiff = Number(body.priceDiff ?? oldOrder.priceDiff ?? 0);
+    const oldPaymentMethodId = getRefId(oldOrder.paymentMethodId);
+    const nextPaymentMethodId = hasBodyField(body, "paymentMethodId")
+      ? body.paymentMethodId
+        ? Number(body.paymentMethodId)
+        : null
+      : oldPaymentMethodId || null;
+    let nextPaymentMethod = body.paymentMethod ?? oldOrder.paymentMethod ?? "cash";
+
+    if (hasBodyField(body, "paymentMethodId")) {
+      if (nextPaymentMethodId) {
+        const wallet = await PaymentMethod.findById(nextPaymentMethodId);
+        if (!wallet) {
+          await applyOrderEffects(oldOrder, currentUser);
+          return errorResponse("وسيلة الدفع غير موجودة", 400);
+        }
+        nextPaymentMethod = wallet.name;
+      } else {
+        nextPaymentMethod = "cash";
+      }
+    }
 
     const updateBody = {
       ...body,
       items,
       weightItems,
-      paymentMethod: "cash",
+      status: nextStatus,
+      order_type: nextOrderType,
+      paymentMethod: nextPaymentMethod,
+      paymentMethodId: nextPaymentMethodId,
       subtotal,
       shipping,
       priceDiff,
@@ -235,7 +325,7 @@ export async function PUT(
         value: discountValue,
         amount: discountAmount,
       },
-      total: subtotal - discountAmount + shipping + priceDiff,
+      total: Math.max(0, subtotal - discountAmount + shipping + priceDiff),
     };
 
     const updatedOrder = await Order.findByIdAndUpdate(id, updateBody, {
