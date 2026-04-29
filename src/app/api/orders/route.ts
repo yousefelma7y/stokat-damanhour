@@ -33,12 +33,12 @@ export async function GET(request: NextRequest) {
     if (searchParams.get("createdBy")) {
       filter.createdBy = searchParams.get("createdBy");
     }
-    if (searchParams.get("paymentMethod")) {
-      const pm = searchParams.get("paymentMethod");
+    const paymentMethodFilter =
+      searchParams.get("paymentMethodId") || searchParams.get("paymentMethod");
+    if (paymentMethodFilter) {
+      const pm = paymentMethodFilter;
       if (!Number.isNaN(Number(pm))) {
-        filter.$or = [
-          { paymentMethodId: Number(pm) }
-        ];
+        filter.paymentMethodId = Number(pm);
       } else {
         filter.paymentMethod = pm;
       }

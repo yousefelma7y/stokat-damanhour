@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { Eye, QrCode, XCircleIcon } from "lucide-react";
 import { PlusIcon } from "@heroicons/react/24/outline";
-import { NumericFormat } from "react-number-format";
 import Cookies from "js-cookie";
 import Button from "../../../components/Button";
 import ContentTable from "../../../components/contentTable";
@@ -42,6 +41,67 @@ const PAYMENT_METHOD_LABELS = {
 const kgToGrams = (kg) => Number((Number(kg || 0) * 1000).toFixed(2));
 const formatGrams = (grams) =>
   Number(grams || 0).toLocaleString("ar-EG", { maximumFractionDigits: 2 });
+const formatMoney = (amount) =>
+  `${new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(amount || 0))} EGP`;
+
+const formatDatePart = (date) =>
+  new Intl.DateTimeFormat("ar-EG", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(date));
+
+const formatTimePart = (date) =>
+  new Intl.DateTimeFormat("ar-EG", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  }).format(new Date(date));
+
+const getDiscountAmount = (order) => {
+  const storedDiscount = Number(order?.discount?.amount || 0);
+  if (storedDiscount > 0) return storedDiscount;
+
+  const discountValue = Number(order?.discount?.value || 0);
+  if (discountValue <= 0) return 0;
+
+  return order?.discount?.type === "percentage"
+    ? (Number(order?.subtotal || 0) * discountValue) / 100
+    : discountValue;
+};
+
+const OrderTotalCell = ({ order }) => {
+  const discountAmount = getDiscountAmount(order);
+  const total = Number(order?.total || 0);
+  const hasDiscount = discountAmount > 0;
+  const totalBeforeDiscount = hasDiscount ? total + discountAmount : total;
+
+  if (!hasDiscount) {
+    return <span className="font-bold text-gray-900">{formatMoney(total)}</span>;
+  }
+
+  return (
+    <span className="inline-flex flex-col items-center gap-1" dir="ltr">
+      <span className="text-[11px] font-medium text-slate-400 line-through">
+        {formatMoney(totalBeforeDiscount)}
+      </span>
+      <span className="font-bold text-emerald-700">{formatMoney(total)}</span>
+      <span className="text-[10px] font-semibold text-rose-500" dir="rtl">
+        بعد خصم {formatMoney(discountAmount)}
+      </span>
+    </span>
+  );
+};
+
+const OrderDateTimeCell = ({ date }) => (
+  <span className="inline-flex flex-col items-center gap-1">
+    <span className="font-medium text-gray-800">{formatDatePart(date)}</span>
+    <span className="text-xs text-slate-500">{formatTimePart(date)}</span>
+  </span>
+);
 
 export default function OrdersPage() {
   const [userRole, setUserRole] = useState(null);
@@ -92,7 +152,7 @@ export default function OrdersPage() {
       const params = { page, limit, search: searchValue };
       if (status) params.status = status;
       if (orderType) params.orderType = orderType;
-      if (paymentMethod) params.paymentMethod = paymentMethod;
+      if (paymentMethod) params.paymentMethodId = paymentMethod;
       if (startDate) params.startDate = startDate;
       if (endDate) params.endDate = endDate;
 
@@ -135,11 +195,26 @@ export default function OrdersPage() {
     }
   };
 
+  const fetchPaymentMethods = async () => {
+    try {
+      const { data } = await axiosClient.get("/payment-methods");
+      setPaymentMethodsList(data.data || []);
+    } catch (error) {
+      console.error("Failed to fetch payment methods:", error);
+    }
+  };
+
   useEffect(() => {
     if (userRole === "admin") {
       fetchCatalogData();
+    } else if (userRole) {
+      fetchPaymentMethods();
     }
   }, [userRole]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchValue, status, orderType, paymentMethod, startDate, endDate]);
 
   useEffect(() => {
     fetchOrders();
@@ -274,14 +349,7 @@ export default function OrdersPage() {
         order.order_type === "weight"
           ? `${formatGrams(weightItemsGrams)} جم`
           : regularItemsQty,
-      total: (
-        <NumericFormat
-          value={order.total || 0}
-          displayType="text"
-          thousandSeparator
-          suffix=" EGP"
-        />
-      ),
+      total: <OrderTotalCell order={order} />,
       orderType: (
         <span
           className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
@@ -311,11 +379,7 @@ export default function OrdersPage() {
         </span>
       ),
       paymentMethod: PAYMENT_METHOD_LABELS[order.paymentMethod] || order.paymentMethod || "كاش",
-      date: new Date(order.createdAt).toLocaleDateString("ar-EG", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      }),
+      date: <OrderDateTimeCell date={order.createdAt} />,
     };
   });
 
@@ -459,7 +523,7 @@ export default function OrdersPage() {
             "رقم الطلب",
             "اسم العميل",
             "عدد العناصر",
-            "الإجمالي",
+            "السعر",
             "نوع الطلب",
             "الحالة",
             "وسيلة الدفع",

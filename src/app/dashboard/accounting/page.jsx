@@ -652,7 +652,7 @@ const FilteredStatsSection = ({ stats, visible }) => {
         <div className="h-8 w-1 bg-blue-600 rounded-full"></div>
         <h2 className="font-bold text-slate-900 text-lg">تحليل النتائج المصفاة</h2>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
         <div className="bg-white p-4 border border-slate-100 rounded-2xl shadow-sm hover:shadow-md transition-all border-r-4 border-r-blue-500">
           <div className="flex items-center gap-3 mb-2">
             <div className="p-2 bg-blue-50 rounded-xl">
@@ -679,6 +679,15 @@ const FilteredStatsSection = ({ stats, visible }) => {
             <span className="text-slate-500 text-xs font-bold">إجمالي الصرف</span>
           </div>
           <p className="text-xl font-black text-red-600">{stats.totalExpenses.toLocaleString()} EGP</p>
+        </div>
+        <div className="bg-white p-4 border border-slate-100 rounded-2xl shadow-sm hover:shadow-md transition-all border-r-4 border-r-sky-500">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-sky-50 rounded-xl">
+              <ArrowLeftRight className="w-4 h-4 text-sky-600" />
+            </div>
+            <span className="text-slate-500 text-xs font-bold">إجمالي التحويلات</span>
+          </div>
+          <p className="text-xl font-black text-sky-600">{stats.totalTransfers.toLocaleString()} EGP</p>
         </div>
         <div className="bg-white p-4 border border-slate-100 rounded-2xl shadow-sm hover:shadow-md transition-all border-r-4 border-r-indigo-500">
           <div className="flex items-center gap-3 mb-2">
@@ -744,6 +753,7 @@ export default function AccountingSystem() {
   const [filteredStats, setFilteredStats] = useState({
     totalIncome: 0,
     totalExpenses: 0,
+    totalTransfers: 0,
     netChange: 0,
     totalCount: 0,
   });
@@ -781,6 +791,7 @@ export default function AccountingSystem() {
         txnRes.data.stats || {
           totalIncome: 0,
           totalExpenses: 0,
+          totalTransfers: 0,
           netChange: 0,
           totalCount: 0,
         },
@@ -921,6 +932,46 @@ export default function AccountingSystem() {
                 إدارة جميع المعاملات المالية
               </p>
             </div>
+            <div className="flex flex-wrap gap-3 w-full sm:w-auto">
+              {/* <button
+                disabled={paymentMethods?.length === 0}
+                onClick={() => setTransferModalOpen(true)}
+                className="flex flex-1 sm:flex-none justify-center items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:hover:bg-blue-600 px-4 sm:px-6 py-2 rounded-lg font-medium text-white text-sm sm:text-base transition-colors cursor-pointer disabled:cursor-not-allowed"
+              >
+                <ArrowLeftRight className="w-4 h-4" />
+                تحويل بين المحافظ
+              </button> */}
+              <button
+                disabled={paymentMethods?.length === 0}
+                onClick={() => {
+                  setSelectedAccount({
+                    entity_name: "مدفوعات يدوية",
+                    account_type: "manual_pay",
+                    type: "pay",
+                  });
+                  setTransferOpen(true);
+                }}
+                className="flex flex-1 sm:flex-none justify-center items-center gap-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:hover:bg-red-600 px-4 sm:px-6 py-2 rounded-lg font-medium text-white text-sm sm:text-base transition-colors cursor-pointer disabled:cursor-not-allowed"
+              >
+                <ArrowDownLeft className="w-4 h-4" />
+                صرف مبلغ
+              </button>
+              <button
+                disabled={paymentMethods?.length === 0}
+                onClick={() => {
+                  setSelectedAccount({
+                    entity_name: "إيرادات يدوية",
+                    account_type: "manual_get",
+                    type: "get",
+                  });
+                  setTransferOpen(true);
+                }}
+                className="flex flex-1 sm:flex-none justify-center items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:hover:bg-emerald-600 px-4 sm:px-6 py-2 rounded-lg font-medium text-white text-sm sm:text-base transition-colors cursor-pointer disabled:cursor-not-allowed"
+              >
+                <ArrowUpRight className="w-4 h-4" />
+                تحصيل مبلغ
+              </button>
+            </div>
           </div>
 
           {/* Stats */}
@@ -1009,6 +1060,13 @@ export default function AccountingSystem() {
                     items: transactionTypes,
                     byId: true,
                   },
+                  {
+                    placeholder: "الحالة",
+                    value: filterStatus,
+                    onChange: setFilterStatus,
+                    items: transactionStatuses,
+                    byId: true,
+                  },
                 ]}
               />
             </div>
@@ -1049,6 +1107,20 @@ export default function AccountingSystem() {
           )}
         </div>
       </div>
+
+      <ManualTransactionModal
+        isOpen={transferOpen}
+        onClose={() => setTransferOpen(false)}
+        mode={selectedAccount}
+        onSubmit={handleTransferSubmit}
+      />
+
+      <TransferModal
+        isOpen={transferModalOpen}
+        onClose={() => setTransferModalOpen(false)}
+        onSubmit={handleWalletTransfer}
+      />
+
       <DetailsModal
         isOpen={detailsOpen}
         onClose={() => setDetailsOpen(false)}

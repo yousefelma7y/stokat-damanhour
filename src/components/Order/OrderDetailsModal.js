@@ -33,6 +33,24 @@ const formatWeightGrams = (weightKg) =>
     maximumFractionDigits: 2,
   });
 
+const formatMoney = (amount) =>
+  `${new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(amount || 0))} EGP`;
+
+const getDiscountAmount = (order) => {
+  const storedDiscount = Number(order?.discount?.amount || 0);
+  if (storedDiscount > 0) return storedDiscount;
+
+  const discountValue = Number(order?.discount?.value || 0);
+  if (discountValue <= 0) return 0;
+
+  return order?.discount?.type === "percentage"
+    ? (Number(order?.subtotal || 0) * discountValue) / 100
+    : discountValue;
+};
+
 const OrderDetailsModal = ({ isOpen, onClose, orderId }) => {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -59,7 +77,7 @@ const OrderDetailsModal = ({ isOpen, onClose, orderId }) => {
   const orderType = ORDER_TYPE_MAP[order?.order_type] || ORDER_TYPE_MAP.regular;
   const status = STATUS_MAP[order?.status] || STATUS_MAP.pending;
   const StatusIcon = status.Icon;
-  const discountAmount = Number(order?.discount?.amount || 0);
+  const discountAmount = getDiscountAmount(order);
 
   return (
     <div className="z-50 fixed inset-0 flex justify-center items-center bg-black/60 backdrop-blur-sm p-4">
@@ -157,8 +175,8 @@ const OrderDetailsModal = ({ isOpen, onClose, orderId }) => {
                           <tr key={idx}>
                             <td className="px-4 py-3">{item.product?.name || `منتج #${item.product}`}</td>
                             <td className="px-4 py-3 text-center">{item.quantity}</td>
-                            <td className="px-4 py-3 text-center">{(item.price || 0).toLocaleString()} EGP</td>
-                            <td className="px-4 py-3 text-center font-bold">{(item.total || 0).toLocaleString()} EGP</td>
+                            <td className="px-4 py-3 text-center">{formatMoney(item.price)}</td>
+                            <td className="px-4 py-3 text-center font-bold">{formatMoney(item.total)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -188,8 +206,8 @@ const OrderDetailsModal = ({ isOpen, onClose, orderId }) => {
                           <tr key={idx}>
                             <td className="px-4 py-3">{item.weightProduct?.name || `صنف #${item.weightProduct}`}</td>
                             <td className="px-4 py-3 text-center">{formatWeightGrams(item.weight)} جم</td>
-                            <td className="px-4 py-3 text-center">{(item.pricePerKg || 0).toLocaleString()} EGP</td>
-                            <td className="px-4 py-3 text-center font-bold">{(item.total || 0).toLocaleString()} EGP</td>
+                            <td className="px-4 py-3 text-center">{formatMoney(item.pricePerKg)}</td>
+                            <td className="px-4 py-3 text-center font-bold">{formatMoney(item.total)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -206,13 +224,13 @@ const OrderDetailsModal = ({ isOpen, onClose, orderId }) => {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between items-center">
                     <span className="text-slate-600">المجموع الفرعي:</span>
-                    <span className="font-medium text-slate-800">{(order.subtotal || 0).toLocaleString()} EGP</span>
+                    <span className="font-medium text-slate-800">{formatMoney(order.subtotal)}</span>
                   </div>
                   {discountAmount > 0 && (
                     <div className="flex justify-between items-center">
                       <span className="text-slate-600">الخصم:</span>
                       <span className="font-medium text-rose-600">
-                        -{discountAmount.toLocaleString()} EGP
+                        -{formatMoney(discountAmount)}
                       </span>
                     </div>
                   )}
@@ -222,7 +240,7 @@ const OrderDetailsModal = ({ isOpen, onClose, orderId }) => {
                   </div>
                   <div className="flex justify-between items-center pt-2 mt-2 border-t border-slate-300">
                     <span className="font-bold text-slate-900">الإجمالي:</span>
-                    <span className="font-black text-lg text-emerald-700">{(order.total || 0).toLocaleString()} EGP</span>
+                    <span className="font-black text-lg text-emerald-700">{formatMoney(order.total)}</span>
                   </div>
                 </div>
               </div>

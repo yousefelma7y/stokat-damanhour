@@ -22,25 +22,30 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get("search") || "";
 
     const filter: any = { isActive: { $ne: false } };
+    const andConditions: any[] = [];
 
     // 1. Search Query
     if (search) {
-      filter.$or = [
-        { transactionId: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
-        { from: { $regex: search, $options: "i" } },
-        { to: { $regex: search, $options: "i" } },
-      ];
+      andConditions.push({
+        $or: [
+          { transactionId: { $regex: search, $options: "i" } },
+          { description: { $regex: search, $options: "i" } },
+          { from: { $regex: search, $options: "i" } },
+          { to: { $regex: search, $options: "i" } },
+        ],
+      });
     }
 
     // 2. Payment Method Filter
     const paymentMethodId = searchParams.get("paymentMethodId");
     if (paymentMethodId) {
-      filter.$or = [
-        { paymentMethodId: Number(paymentMethodId) },
-        { fromWallet: Number(paymentMethodId) },
-        { toWallet: Number(paymentMethodId) },
-      ];
+      andConditions.push({
+        $or: [
+          { paymentMethodId: Number(paymentMethodId) },
+          { fromWallet: Number(paymentMethodId) },
+          { toWallet: Number(paymentMethodId) },
+        ],
+      });
     }
 
     // 3. Date Range Filter
@@ -60,11 +65,18 @@ export async function GET(request: NextRequest) {
     const type = searchParams.get("type");
     if (type) filter.type = type;
 
+    const status = searchParams.get("status");
+    if (status) filter.status = status;
+
     const category = searchParams.get("category");
     if (category) filter.category = category;
 
     const createdBy = searchParams.get("createdBy");
     if (createdBy) filter.createdBy = createdBy;
+
+    if (andConditions.length) {
+      filter.$and = andConditions;
+    }
 
     const skip = (page - 1) * limit;
 
@@ -115,6 +127,20 @@ export async function GET(request: NextRequest) {
               ],
             },
           },
+          totalTransfers: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ["$type", "transfer"] },
+                    { $eq: ["$status", "completed"] },
+                  ],
+                },
+                "$amount",
+                0,
+              ],
+            },
+          },
           totalCount: { $sum: 1 },
         },
       },
@@ -125,12 +151,14 @@ export async function GET(request: NextRequest) {
         ? {
             totalIncome: stats[0].totalIncome,
             totalExpenses: stats[0].totalExpenses,
+            totalTransfers: stats[0].totalTransfers,
             netChange: stats[0].totalIncome - stats[0].totalExpenses,
             totalCount: stats[0].totalCount,
           }
         : {
             totalIncome: 0,
             totalExpenses: 0,
+            totalTransfers: 0,
             netChange: 0,
             totalCount: 0,
           };
