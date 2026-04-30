@@ -62,6 +62,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
       dashboard: fullAccess,
       "create-order": fullAccess,
       orders: fullAccess,
+      debts: fullAccess,
       products: fullAccess,
       "shifts-page": fullAccess,
       "shift-summary": fullAccess,
@@ -91,6 +92,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
       dashboard: noAccess, // Stats/Reports
       "create-order": fullAccess,
       orders: fullAccess,
+      debts: fullAccess,
       products: fullAccess,
       "shifts-page": noAccess,
       "shift-summary": fullAccess,
@@ -121,6 +123,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
       dashboard: noAccess,
       "create-order": noAccess,
       orders: noAccess,
+      debts: fullAccess,
       products: noAccess,
       "shifts-page": noAccess,
       "shift-summary": noAccess,

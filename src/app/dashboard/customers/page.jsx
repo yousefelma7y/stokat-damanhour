@@ -31,6 +31,12 @@ const initialFormValues = {
   location: "",
 };
 
+const formatMoney = (amount) =>
+  `${Number(amount || 0).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} EGP`;
+
 export default function Customers() {
   const [userRole, setUserRole] = useState(null);
   useEffect(() => {
@@ -349,7 +355,21 @@ export default function Customers() {
                     phone: customer?.phone,
                     location: customer?.location || "لا يوجد",
                     completedOrders: customer?.completedOrders?.length || 0,
-                    totalPayments: customer?.totalPayments || 0,
+                    totalPayments: (
+                      <span className="font-bold text-emerald-700">
+                        {formatMoney(customer?.totalPayments)}
+                      </span>
+                    ),
+                    debtBalance: (
+                      <span className="font-bold text-amber-700">
+                        {formatMoney(customer?.debtBalance)}
+                      </span>
+                    ),
+                    totalDebtPaid: (
+                      <span className="font-bold text-blue-700">
+                        {formatMoney(customer?.totalDebtPaid)}
+                      </span>
+                    ),
                   }
                 : {
                     _id: customer?._id,
@@ -409,6 +429,8 @@ export default function Customers() {
                     "العنوان",
                     "عدد الطلبات",
                     "المدفوعات",
+                    "المديونية",
+                    "مسدد المديونية",
                   ]
                 : ["id", "إسم العميل", "رقم الهاتف", "العنوان"]
             }

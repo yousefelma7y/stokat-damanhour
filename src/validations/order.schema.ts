@@ -32,6 +32,12 @@ export const orderWeightItemSchema = z.object({
   total: nullableNumber,
 });
 
+export const orderPaymentSchema = z.object({
+  paymentMethodId: z.number(),
+  name: nullableString,
+  amount: z.number().min(0),
+});
+
 export const createOrderSchema = z
   .object({
     customer: z.preprocess(
@@ -78,6 +84,13 @@ export const createOrderSchema = z
     order_type: z.enum(["regular", "weight"]).default("regular"),
     paymentMethod: nullableString,
     paymentMethodId: nullableNumber,
+    payments: z.preprocess(
+      (val) => (val === null ? [] : val),
+      z.array(orderPaymentSchema).default([]),
+    ),
+    paidAmount: nullableNumberDefault(0),
+    isDebt: z.boolean().default(false),
+    remainingAmount: nullableNumberDefault(0),
     notes: nullableString,
     priceDiff: nullableNumberDefault(0),
     orderNumber: nullableString,

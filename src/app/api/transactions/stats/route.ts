@@ -6,23 +6,52 @@ import { successResponse, handleError } from "@/lib/api-response";
 export async function GET(request: NextRequest) {
   try {
     await connectDB();
+    const reversalCategories = [
+      "adjustment",
+      "cancelled_order",
+      "debt_settlement_refund",
+    ];
 
     const stats = await Transaction.aggregate([
-      { $match: { status: "completed" } }, // Filter for completed transactions
+      { $match: { status: { $in: ["completed", "cancelled"] } } },
       {
         $group: {
           _id: null,
           totalIncome: {
-            // Sum all GET/income transactions as POSITIVE (+)
             $sum: {
-              $cond: [{ $eq: ["$type", "income"] }, "$amount", 0],
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ["$type", "income"] },
+                    { $eq: ["$status", "completed"] },
+                  ],
+                },
+                "$amount",
+                {
+                  $cond: [
+                    {
+                      $and: [
+                        { $eq: ["$type", "payment"] },
+                        { $in: ["$category", reversalCategories] },
+                      ],
+                    },
+                    { $multiply: ["$amount", -1] },
+                    0,
+                  ],
+                },
+              ],
             },
           },
           totalExpenses: {
-            // Sum all PAY/payment transactions as NEGATIVE (-)
             $sum: {
               $cond: [
-                { $eq: ["$type", "payment"] },
+                {
+                  $and: [
+                    { $eq: ["$type", "payment"] },
+                    { $not: [{ $in: ["$category", reversalCategories] }] },
+                    { $eq: ["$status", "completed"] },
+                  ],
+                },
                 { $multiply: ["$amount", -1] },
                 0,
               ],

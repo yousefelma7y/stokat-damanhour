@@ -47,6 +47,23 @@ const formatMoney = (amount) =>
     maximumFractionDigits: 2,
   }).format(Number(amount || 0))} EGP`;
 
+const getPaymentSummary = (order) => {
+  const payments = order?.payments || [];
+  const paymentLabel =
+    payments.length > 1
+      ? payments.map((payment) => payment.name).filter(Boolean).join(" + ")
+      : payments[0]?.name ||
+        PAYMENT_METHOD_LABELS[order.paymentMethod] ||
+        order.paymentMethod ||
+        "كاش";
+
+  if (Number(order?.remainingAmount || 0) > 0) {
+    return `${paymentLabel} / مديونية ${formatMoney(order.remainingAmount)}`;
+  }
+
+  return paymentLabel;
+};
+
 const formatDatePart = (date) =>
   new Intl.DateTimeFormat("ar-EG", {
     year: "numeric",
@@ -270,6 +287,17 @@ export default function OrdersPage() {
     try {
       setLoadingBtn(true);
       const isWeightOrder = values.order_type === "weight";
+      const normalizedPayments = (values.payments || [])
+        .map((payment) => ({
+          paymentMethodId: Number(payment.paymentMethodId),
+          name: payment.name,
+          amount: Number(payment.amount || 0),
+        }))
+        .filter((payment) => payment.paymentMethodId && payment.amount > 0);
+      const paidAmount = normalizedPayments.reduce(
+        (sum, payment) => sum + payment.amount,
+        0,
+      );
       const orderData = {
         order_type: values.order_type,
         items: isWeightOrder
@@ -306,8 +334,10 @@ export default function OrdersPage() {
         shipping: Number(values.shipping),
         priceDiff: Number(values.priceDiff || 0),
         status: values.status,
-        paymentMethodId: values.paymentMethodId ? Number(values.paymentMethodId) : null,
-        paidAmount: Number(values.paidAmount || 0),
+        paymentMethodId: normalizedPayments[0]?.paymentMethodId || null,
+        payments: normalizedPayments,
+        paidAmount,
+        isDebt: Boolean(values.isDebt),
         supplier: values.supplier || null,
       };
 
@@ -378,7 +408,7 @@ export default function OrdersPage() {
               : "ملغي"}
         </span>
       ),
-      paymentMethod: PAYMENT_METHOD_LABELS[order.paymentMethod] || order.paymentMethod || "كاش",
+      paymentMethod: getPaymentSummary(order),
       date: <OrderDateTimeCell date={order.createdAt} />,
     };
   });

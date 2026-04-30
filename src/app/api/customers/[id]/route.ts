@@ -38,7 +38,7 @@ export async function GET(
     };
 
     const skip = (page - 1) * limit;
-    const total = await Order.countDocuments(filter);
+    const totalPromise = Order.countDocuments(filter);
 
     // Fetch customer orders
     const ordersPromise = Order.find(filter)
@@ -47,27 +47,38 @@ export async function GET(
       .limit(limit)
       .sort({ createdAt: -1 });
 
-    // Fetch customer-related transactions
-    const transactionsPromise = Transaction.find({
-      relatedModel: "Order",
-      description: { $regex: String(id), $options: "i" },
+    const orderIdsPromise = Order.distinct("_id", filter);
+    const completedOrdersPromise = Order.countDocuments({
+      ...filter,
+      status: "completed",
+    });
+
+    const [total, orders, orderIds, completedOrders] = await Promise.all([
+      totalPromise,
+      ordersPromise,
+      orderIdsPromise,
+      completedOrdersPromise,
+    ]);
+
+    // Fetch direct customer transactions such as debt settlements, plus order transactions.
+    const transactions = await Transaction.find({
+      isActive: { $ne: false },
+      $or: [
+        { relatedModel: "Customer", relatedId: id },
+        { relatedModel: "Order", relatedId: { $in: orderIds } },
+      ],
     })
       .sort({ createdAt: -1 })
       .limit(50);
 
-    const [orders, transactions] = await Promise.all([
-      ordersPromise,
-      transactionsPromise,
-    ]);
-
     // Calculate stats
     const stats = {
       totalOrders: total,
-      completedOrders: await Order.countDocuments({
-        ...filter,
-        status: "completed",
-      }),
+      completedOrders,
       totalSpent: customer.totalPayments || 0,
+      debtBalance: customer.debtBalance || 0,
+      totalDebt: customer.totalDebt || 0,
+      totalDebtPaid: customer.totalDebtPaid || 0,
     };
 
     return successResponse(

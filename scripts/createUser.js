@@ -64,7 +64,7 @@ async function createUser() {
         // Actually, let's keep it simple and hash here as before.
 
         console.log('🔐 Hashing password...');
-        const hashedPassword = await bcrypt.hash('admin', 10); // 10 = salt rounds
+        const hashedPassword = await bcrypt.hash('123456', 10); // 10 = salt rounds
 
         const user = await User.create({
             userName: 'admin',
@@ -82,7 +82,7 @@ async function createUser() {
         console.log('📝 Login Credentials:');
         console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         console.log('Username:', user.userName);
-        console.log('Password: admin');
+        console.log('Password: 123456');
         console.log('User ID:', user._id);
         console.log('Salary:', user.salary);
         console.log('Brand Name:', user.brandName);

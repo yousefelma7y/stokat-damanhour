@@ -38,7 +38,10 @@ export async function GET(request: NextRequest) {
     if (paymentMethodFilter) {
       const pm = paymentMethodFilter;
       if (!Number.isNaN(Number(pm))) {
-        filter.paymentMethodId = Number(pm);
+        filter.$or = [
+          { paymentMethodId: Number(pm) },
+          { "payments.paymentMethodId": Number(pm) },
+        ];
       } else {
         filter.paymentMethod = pm;
       }

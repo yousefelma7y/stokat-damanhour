@@ -51,6 +51,38 @@ const getDiscountAmount = (order) => {
     : discountValue;
 };
 
+const getPaymentRows = (order) => {
+  if (order?.payments?.length) return order.payments;
+  const paidAmount = getPaidAmount(order);
+  if (order?.paymentMethodId && paidAmount > 0) {
+    return [
+      {
+        paymentMethodId: order.paymentMethodId,
+        name: order.paymentMethod,
+        amount: paidAmount,
+      },
+    ];
+  }
+  return [];
+};
+
+const getPaidAmount = (order) => {
+  const explicitPaid = Number(order?.paidAmount || 0);
+  if (explicitPaid > 0) return explicitPaid;
+
+  const paymentRowsTotal = (order?.payments || []).reduce(
+    (sum, payment) => sum + Number(payment.amount || 0),
+    0,
+  );
+  if (paymentRowsTotal > 0) return paymentRowsTotal;
+
+  if (order?.status === "completed" && Number(order?.remainingAmount || 0) <= 0) {
+    return Number(order?.total || 0);
+  }
+
+  return 0;
+};
+
 const OrderDetailsModal = ({ isOpen, onClose, orderId }) => {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -234,10 +266,29 @@ const OrderDetailsModal = ({ isOpen, onClose, orderId }) => {
                       </span>
                     </div>
                   )}
+                  {getPaymentRows(order).length > 0 ? (
+                    getPaymentRows(order).map((payment, index) => (
+                      <div key={`${payment.paymentMethodId}-${index}`} className="flex justify-between items-center">
+                        <span className="text-slate-600">دفع {payment.name || "وسيلة دفع"}:</span>
+                        <span className="font-medium text-slate-800">{formatMoney(payment.amount)}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-600">الدفع:</span>
+                      <span className="font-medium text-slate-800">{order.paymentMethod || "لم يتم الدفع"}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-center">
-                    <span className="text-slate-600">الدفع:</span>
-                    <span className="font-medium text-slate-800">{order.paymentMethod || "كاش"}</span>
+                    <span className="text-slate-600">المدفوع:</span>
+                    <span className="font-medium text-blue-700">{formatMoney(getPaidAmount(order))}</span>
                   </div>
+                  {Number(order.remainingAmount || 0) > 0 && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-600">مديونية متبقية:</span>
+                      <span className="font-bold text-amber-700">{formatMoney(order.remainingAmount)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-center pt-2 mt-2 border-t border-slate-300">
                     <span className="font-bold text-slate-900">الإجمالي:</span>
                     <span className="font-black text-lg text-emerald-700">{formatMoney(order.total)}</span>

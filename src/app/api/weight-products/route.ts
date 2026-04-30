@@ -28,11 +28,15 @@ export async function GET(request: NextRequest) {
     }
 
     const skip = (page - 1) * limit;
-    const total = await WeightProduct.countDocuments(filter);
-    const data = await WeightProduct.find(filter)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
+    const [total, data] = await Promise.all([
+      WeightProduct.countDocuments(filter),
+      WeightProduct.find(filter)
+        .select("_id name pricePerKg")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+    ]);
 
     return successResponse(data, "Weight products retrieved", {
       page,

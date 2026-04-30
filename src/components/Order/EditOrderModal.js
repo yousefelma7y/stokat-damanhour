@@ -4,8 +4,11 @@ import Button from "../Button";
 import { Formik, Form, Field, FieldArray } from "formik";
 import * as Yup from "yup";
 import { Plus, Trash2 } from "lucide-react";
+import PaymentSplitSelect from "../PaymentSplitSelect";
 
 const kgToGrams = (kg) => Number((Number(kg || 0) * 1000).toFixed(2));
+const roundMoney = (value) =>
+    Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 
 const EditOrderModal = ({
     showModal,
@@ -83,6 +86,20 @@ const EditOrderModal = ({
                     status: editingOrder?.status || "pending",
                     paidAmount: editingOrder?.paidAmount || 0,
                     paymentMethodId: editingOrder?.paymentMethodId?._id || editingOrder?.paymentMethodId || "",
+                    payments: editingOrder?.payments?.length
+                        ? editingOrder.payments.map((payment) => ({
+                            paymentMethodId: payment.paymentMethodId,
+                            name: payment.name,
+                            amount: Number(payment.amount || 0),
+                        }))
+                        : editingOrder?.paymentMethodId
+                            ? [{
+                                paymentMethodId: editingOrder.paymentMethodId?._id || editingOrder.paymentMethodId,
+                                name: editingOrder.paymentMethod,
+                                amount: Number(editingOrder.paidAmount || editingOrder.total || 0),
+                            }]
+                            : [],
+                    isDebt: Number(editingOrder?.remainingAmount || 0) > 0,
                     supplier: editingOrder?.supplier?._id || editingOrder?.supplier || "",
                     order_type: editingOrder?.order_type || "regular",
                     scrapItems: editingOrder?.scrapItems?.map(item => {
@@ -151,6 +168,13 @@ const EditOrderModal = ({
                     shipping: Yup.number().min(0, "الشحن يجب أن يكون صفر أو أكبر"),
                     status: Yup.string().required("حالة الطلب مطلوبة"),
                     paymentMethodId: Yup.string(),
+                    payments: Yup.array().of(
+                        Yup.object({
+                            paymentMethodId: Yup.number().required("وسيلة الدفع مطلوبة"),
+                            amount: Yup.number().min(0, "المبلغ يجب أن يكون صفر أو أكبر"),
+                        })
+                    ),
+                    isDebt: Yup.boolean(),
                     paidAmount: Yup.number().min(0, "المبلغ المدفوع يجب أن يكون صفر أو أكبر"),
                     supplier: Yup.string().when("order_type", {
                         is: "delayed",
@@ -188,6 +212,10 @@ const EditOrderModal = ({
 
                     // Calculate total
                     const total = Math.max(0, subtotal - discountAmount + Number(values.shipping) + priceDiffValue);
+                    const paidAmount = roundMoney(
+                        (values.payments || []).reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
+                    );
+                    const remainingAmount = roundMoney(Math.max(0, total - paidAmount));
 
                     const isWeightOrder = values.order_type === "weight";
                     const isEditable = ["regular", "weight", "delayed"].includes(values.order_type);
@@ -873,25 +901,36 @@ const EditOrderModal = ({
                                             </Field>
                                         </div>
 
-                                        {paymentMethods.length > 0 && (
-                                            <div>
-                                                <label className="block mb-2 font-medium text-gray-700 text-sm">
-                                                    وسيلة الدفع
-                                                </label>
+                                        <div className="col-span-2 space-y-3 rounded-xl border border-slate-200 bg-white p-3">
+                                            <label className="flex items-center justify-between gap-3 cursor-pointer">
+                                                <span className="text-sm font-bold text-slate-800">
+                                                    تسجيل مديونية
+                                                </span>
                                                 <Field
-                                                    as="select"
-                                                    name="paymentMethodId"
-                                                    className="px-4 py-1 border !h-11 border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 w-full"
-                                                >
-                                                    <option value="">كاش / بدون محفظة</option>
-                                                    {paymentMethods.map((method) => (
-                                                        <option key={method._id} value={method._id}>
-                                                            {method.name}
-                                                        </option>
-                                                    ))}
-                                                </Field>
+                                                    type="checkbox"
+                                                    name="isDebt"
+                                                    className="h-5 w-5 accent-amber-600"
+                                                />
+                                            </label>
+                                            <PaymentSplitSelect
+                                                payments={values.payments}
+                                                setPayments={(nextPayments) => setFieldValue("payments", nextPayments)}
+                                                totalAmount={total}
+                                                label="وسائل الدفع"
+                                                allowPartial={values.isDebt}
+                                                autoSelectFull={!values.isDebt}
+                                            />
+                                            <div className="grid grid-cols-2 gap-2 text-sm">
+                                                <div className="rounded-lg bg-blue-50 px-3 py-2">
+                                                    <span className="block text-xs text-blue-600">المدفوع</span>
+                                                    <span className="font-bold text-blue-800">{paidAmount.toFixed(2)} EGP</span>
+                                                </div>
+                                                <div className="rounded-lg bg-amber-50 px-3 py-2">
+                                                    <span className="block text-xs text-amber-600">المتبقي</span>
+                                                    <span className="font-bold text-amber-800">{remainingAmount.toFixed(2)} EGP</span>
+                                                </div>
                                             </div>
-                                        )}
+                                        </div>
 
                                         {/* Delayed Order Specific Fields */}
                                         {editingOrder?.order_type === "delayed" && (

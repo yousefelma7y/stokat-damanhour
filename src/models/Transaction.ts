@@ -18,7 +18,7 @@ export interface ITransaction extends Omit<Document, "_id"> {
   fromWallet?: number; // For transfers
   toWallet?: number; // For transfers
   description?: string;
-  status: "pending" | "completed" | "failed";
+  status: "pending" | "completed" | "failed" | "cancelled";
   relatedModel?: "Order" | "Supplier" | "Customer" | "User" | "Scrap";
   relatedId?: number;
   createdBy?: string;
@@ -51,7 +51,7 @@ const TransactionSchema = new Schema<ITransaction>(
     description: String,
     status: {
       type: String,
-      enum: ["pending", "completed", "failed"],
+      enum: ["pending", "completed", "failed", "cancelled"],
       default: "pending",
     },
     relatedModel: {

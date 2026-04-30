@@ -9,6 +9,9 @@ export interface ICustomer extends Omit<Document, "_id"> {
   location: string;
   completedOrders: number[];
   totalPayments: number;
+  debtBalance: number;
+  totalDebt: number;
+  totalDebtPaid: number;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -22,6 +25,9 @@ const CustomerSchema = new Schema<ICustomer>(
     location: { type: String, required: false },
     completedOrders: [{ type: Number, ref: "Order" }],
     totalPayments: { type: Number, default: 0 },
+    debtBalance: { type: Number, default: 0 },
+    totalDebt: { type: Number, default: 0 },
+    totalDebtPaid: { type: Number, default: 0 },
     isActive: { type: Boolean, default: true },
   },
   { timestamps: true, _id: false },
@@ -33,6 +39,9 @@ CustomerSchema.pre("save", async function (next) {
   }
   next();
 });
+
+CustomerSchema.index({ isActive: 1, debtBalance: 1 });
+CustomerSchema.index({ phone: 1 });
 
 const Customer: Model<ICustomer> =
   mongoose.models.Customer ||

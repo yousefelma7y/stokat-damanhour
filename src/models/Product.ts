@@ -42,6 +42,9 @@ ProductSchema.pre("save", async function (next) {
 });
 
 ProductSchema.index({ name: "text", model: "text" });
+ProductSchema.index({ isActive: 1, createdAt: -1 });
+ProductSchema.index({ isActive: 1, stock: 1 });
+
 if (mongoose.models.Product) {
   delete mongoose.models.Product;
 }

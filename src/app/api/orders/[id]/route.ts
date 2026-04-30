@@ -8,6 +8,7 @@ import Product from "@/models/Product";
 import Transaction from "@/models/Transaction";
 import WeightProduct from "@/models/WeightProduct";
 import { connectDB } from "@/lib/mongodb";
+import { normalizeOrderPayments, roundMoney } from "@/lib/order-payments";
 import { withRetry, withTimeout } from "@/lib/retry-helper";
 import { getCurrentUserName } from "@/lib/get-current-user";
 import {
@@ -69,13 +70,88 @@ function normalizeWeightItems(items: any[] = []) {
   });
 }
 
-async function revertOrderEffects(order: any, currentUser: string) {
+function getCheckoutPayments(order: any) {
+  if (order?.payments?.length > 0) return order.payments;
+  const paidAmount = Number(order?.paidAmount || 0);
+  const remainingAmount = Number(order?.remainingAmount || 0);
+  const settledDebtAmount = sumPayments(getDebtSettlementPayments(order));
+  const fallbackPaidAmount =
+    paidAmount > 0
+      ? Math.max(0, roundMoney(paidAmount - settledDebtAmount))
+      : remainingAmount > 0
+        ? 0
+        : Number(order?.total || 0);
+
+  if (fallbackPaidAmount > 0) {
+    return [
+      {
+        paymentMethodId: getRefId(order.paymentMethodId) || null,
+        name: order.paymentMethod || "cash",
+        amount: fallbackPaidAmount,
+      },
+    ];
+  }
+
+  return [];
+}
+
+function getDebtSettlementPayments(order: any) {
+  return (order?.debtSettlements || [])
+    .map((settlement: any, index: number) => ({
+      index,
+      paymentMethodId: getRefId(settlement.paymentMethodId) || null,
+      name: settlement.paymentMethod || "debt settlement",
+      amount: roundMoney(Number(settlement.amount || 0)),
+      transactionId: settlement.transactionId,
+      createdAt: settlement.createdAt,
+    }))
+    .filter((settlement: any) => settlement.amount > 0);
+}
+
+function sumPayments(payments: any[] = []) {
+  return roundMoney(
+    payments.reduce(
+      (sum: number, payment: any) => sum + Number(payment.amount || 0),
+      0,
+    ),
+  );
+}
+
+async function revertOrderEffects(
+  order: any,
+  currentUser: string,
+  reason: "adjustment" | "cancelled_order" = "adjustment",
+) {
   if (!order || order.status !== "completed") return;
 
-  if (order.customer) {
-    await Customer.findByIdAndUpdate(order.customer, {
+  const checkoutPayments = getCheckoutPayments(order);
+  const paidAtCheckout = sumPayments(checkoutPayments);
+  const isCancelledOrder = reason === "cancelled_order";
+  const settlementRefunds = isCancelledOrder
+    ? getDebtSettlementPayments(order)
+    : [];
+  const settledDebtAmount = sumPayments(settlementRefunds);
+  const totalCustomerRefund = roundMoney(paidAtCheckout + settledDebtAmount);
+  const remainingAmount = roundMoney(Number(order.remainingAmount || 0));
+  const debtAmount = roundMoney(Number(order.debtAmount || 0));
+
+  const customerId =
+    order.customer?._id ?? order.customer?.id ?? order.customer;
+  const customerName = order.customer?.name
+    ? `Customer: ${order.customer.name}`
+    : customerId
+      ? `Customer #${customerId}`
+      : "Customer";
+
+  if (customerId) {
+    await Customer.findByIdAndUpdate(customerId, {
       $pull: { completedOrders: order._id },
-      $inc: { totalPayments: -order.total },
+      $inc: {
+        totalPayments: -totalCustomerRefund,
+        debtBalance: -remainingAmount,
+        totalDebt: -debtAmount,
+        totalDebtPaid: -settledDebtAmount,
+      },
     });
   }
 
@@ -88,39 +164,98 @@ async function revertOrderEffects(order: any, currentUser: string) {
 
   const systemAccount = await Account.findOne({ accountType: "system" });
   if (systemAccount) {
-    systemAccount.currentBalance -= order.total || 0;
-    systemAccount.totalDebits += order.total || 0;
+    systemAccount.currentBalance = roundMoney(
+      Number(systemAccount.currentBalance || 0) - totalCustomerRefund,
+    );
+    systemAccount.totalDebits = roundMoney(
+      Number(systemAccount.totalDebits || 0) + totalCustomerRefund,
+    );
     await systemAccount.save();
   }
 
-  await Transaction.create({
-    transactionId: `TXN-ORD-REV-${order._id}-${Date.now()}`,
-    type: "payment",
-    category: "adjustment",
-    isExpense: true,
-    from: "system",
-    to: "None",
-    amount: order.total || 0,
-    gain: 0,
-    balanceAfter: systemAccount?.currentBalance || 0,
-    description: `إلغاء الطلب رقم ${order._id}`,
-    status: "completed",
-    relatedModel: "Order",
-    relatedId: order._id,
-    paymentMethod: "cash",
-    createdBy: currentUser,
-  });
+  for (const payment of checkoutPayments) {
+    if (payment.paymentMethodId && Number(payment.amount || 0) > 0) {
+      await PaymentMethod.findByIdAndUpdate(payment.paymentMethodId, {
+        $inc: { balance: -Number(payment.amount || 0) },
+      });
+    }
+  }
+
+  for (const settlement of settlementRefunds) {
+    if (settlement.paymentMethodId && settlement.amount > 0) {
+      await PaymentMethod.findByIdAndUpdate(settlement.paymentMethodId, {
+        $inc: { balance: -settlement.amount },
+      });
+    }
+  }
+
+  if (paidAtCheckout > 0) {
+    await Transaction.create({
+      transactionId: `${isCancelledOrder ? "TXN-ORD-CNL" : "TXN-ORD-REV"}-${order._id}-${Date.now()}`,
+      type: "payment",
+      category: isCancelledOrder ? "cancelled_order" : "adjustment",
+      isExpense: true,
+      from: "system",
+      to: isCancelledOrder ? `طلب رقم ${order._id}` : "None",
+      amount: paidAtCheckout,
+      gain: 0,
+      balanceAfter: systemAccount?.currentBalance || 0,
+      description: isCancelledOrder
+        ? `إلغاء الطلب رقم ${order._id}`
+        : `عكس تأثير الطلب رقم ${order._id}`,
+      status: isCancelledOrder ? "cancelled" : "completed",
+      relatedModel: "Order",
+      relatedId: order._id,
+      paymentMethod: order.paymentMethod || "cash",
+      paymentMethodId: getRefId(order.paymentMethodId) || null,
+      createdBy: currentUser,
+    });
+  }
+
+  if (settlementRefunds.length > 0) {
+    await Transaction.create(
+      settlementRefunds.map((settlement: any) => ({
+        transactionId: `TXN-DEBT-REF-${order._id}-${settlement.index}-${Date.now()}`,
+        type: "payment",
+        category: "debt_settlement_refund",
+        isExpense: true,
+        from: "system",
+        to: customerName,
+        amount: settlement.amount,
+        gain: 0,
+        balanceAfter: systemAccount?.currentBalance || 0,
+        description: `رد تسوية مديونية بسبب إلغاء الطلب رقم ${order._id}`,
+        status: "cancelled",
+        relatedModel: "Order",
+        relatedId: order._id,
+        paymentMethod: settlement.name,
+        paymentMethodId: settlement.paymentMethodId,
+        createdBy: currentUser,
+      })),
+    );
+  }
 }
 
 async function applyOrderEffects(order: any, currentUser: string) {
   if (!order || order.status !== "completed") return;
 
   let totalGain = 0;
+  const checkoutPayments = getCheckoutPayments(order);
+  const paidAtCheckout = sumPayments(checkoutPayments);
+  const remainingAmount = roundMoney(Number(order.remainingAmount || 0));
+  const debtAmount = roundMoney(Number(order.debtAmount || 0));
 
-  if (order.customer) {
-    await Customer.findByIdAndUpdate(order.customer, {
+  const customerId =
+    order.customer?._id ?? order.customer?.id ?? order.customer;
+
+  if (customerId) {
+    await Customer.findByIdAndUpdate(customerId, {
       $push: { completedOrders: order._id },
-      $inc: { totalPayments: order.total },
+      $inc: {
+        totalPayments: paidAtCheckout,
+        debtBalance: remainingAmount,
+        totalDebt: debtAmount,
+      },
     });
   }
 
@@ -149,26 +284,43 @@ async function applyOrderEffects(order: any, currentUser: string) {
     });
   }
 
-  systemAccount.currentBalance += order.total || 0;
-  systemAccount.totalCredits += order.total || 0;
+  systemAccount.currentBalance += paidAtCheckout;
+  systemAccount.totalCredits += paidAtCheckout;
   await systemAccount.save();
 
-  await Transaction.create({
-    transactionId: `TXN-ORD-FIX-${order._id}-${Date.now()}`,
-    type: "income",
-    category: "sales",
-    from: `طلب رقم ${order._id}`,
-    to: "system",
-    amount: order.total || 0,
-    gain: totalGain,
-    balanceAfter: systemAccount.currentBalance,
-    description: `تطبيق الطلب رقم ${order._id} (cash)`,
-    status: "completed",
-    relatedModel: "Order",
-    relatedId: order._id,
-    paymentMethod: "cash",
-    createdBy: currentUser,
-  });
+  for (const payment of checkoutPayments) {
+    if (payment.paymentMethodId && Number(payment.amount || 0) > 0) {
+      await PaymentMethod.findByIdAndUpdate(payment.paymentMethodId, {
+        $inc: { balance: Number(payment.amount || 0) },
+      });
+    }
+  }
+
+  if (paidAtCheckout > 0) {
+    await Transaction.create(
+      checkoutPayments
+        .filter((payment: any) => Number(payment.amount || 0) > 0)
+        .map((payment: any) => ({
+          transactionId: `TXN-ORD-FIX-${order._id}-${payment.paymentMethodId}-${Date.now()}`,
+          type: "income",
+          category: "sales",
+          from: `طلب رقم ${order._id}`,
+          to: "system",
+          amount: Number(payment.amount || 0),
+          gain: roundMoney(
+            (totalGain * Number(payment.amount || 0)) / paidAtCheckout,
+          ),
+          balanceAfter: systemAccount.currentBalance,
+          description: `تطبيق الطلب رقم ${order._id} (${payment.name || order.paymentMethod || "cash"})`,
+          status: "completed",
+          relatedModel: "Order",
+          relatedId: order._id,
+          paymentMethod: payment.name || order.paymentMethod || "cash",
+          paymentMethodId: payment.paymentMethodId || null,
+          createdBy: currentUser,
+        })),
+    );
+  }
 }
 
 export async function GET(
@@ -209,7 +361,12 @@ export async function PUT(
     const oldOrder = await populateOrder(Order.findById(id));
     if (!oldOrder) return errorResponse("Order not found", 404);
 
-    await revertOrderEffects(oldOrder, currentUser);
+    const nextStatus = body.status || oldOrder.status || "pending";
+    await revertOrderEffects(
+      oldOrder,
+      currentUser,
+      nextStatus === "cancelled" ? "cancelled_order" : "adjustment",
+    );
 
     if (body.customer && typeof body.customer === "object") {
       const existingCustomer = await Customer.findOne({
@@ -233,7 +390,6 @@ export async function PUT(
       : oldOrder.weightItems || [];
     const items = normalizeProductItems(rawItems);
     const weightItems = normalizeWeightItems(rawWeightItems);
-    const nextStatus = body.status || oldOrder.status || "pending";
     const nextOrderType =
       body.order_type ||
       oldOrder.order_type ||
@@ -269,44 +425,61 @@ export async function PUT(
       }
     }
 
-    const subtotal =
+    const subtotal = roundMoney(
       items.reduce(
         (sum: number, item: any) => sum + Number(item.total || 0),
         0,
       ) +
-      weightItems.reduce(
-        (sum: number, item: any) => sum + Number(item.total || 0),
-        0,
-      );
+        weightItems.reduce(
+          (sum: number, item: any) => sum + Number(item.total || 0),
+          0,
+        ),
+    );
 
     const previousDiscount = oldOrder.discount || {};
     const discountType = body.discount?.type ?? previousDiscount.type ?? "fixed";
     const discountValue = Number(body.discount?.value ?? previousDiscount.value ?? 0);
     const discountAmount =
       discountType === "percentage"
-        ? (subtotal * discountValue) / 100
-        : discountValue;
-    const shipping = Number(body.shipping ?? oldOrder.shipping ?? 0);
-    const priceDiff = Number(body.priceDiff ?? oldOrder.priceDiff ?? 0);
-    const oldPaymentMethodId = getRefId(oldOrder.paymentMethodId);
-    const nextPaymentMethodId = hasBodyField(body, "paymentMethodId")
-      ? body.paymentMethodId
-        ? Number(body.paymentMethodId)
-        : null
-      : oldPaymentMethodId || null;
-    let nextPaymentMethod = body.paymentMethod ?? oldOrder.paymentMethod ?? "cash";
+        ? Math.min(subtotal, roundMoney((subtotal * discountValue) / 100))
+        : Math.min(subtotal, roundMoney(discountValue));
+    const shipping = roundMoney(Number(body.shipping ?? oldOrder.shipping ?? 0));
+    const priceDiff = roundMoney(Number(body.priceDiff ?? oldOrder.priceDiff ?? 0));
+    const nextTotal = roundMoney(
+      Math.max(0, subtotal - discountAmount + shipping + priceDiff),
+    );
 
-    if (hasBodyField(body, "paymentMethodId")) {
-      if (nextPaymentMethodId) {
-        const wallet = await PaymentMethod.findById(nextPaymentMethodId);
-        if (!wallet) {
-          await applyOrderEffects(oldOrder, currentUser);
-          return errorResponse("وسيلة الدفع غير موجودة", 400);
-        }
-        nextPaymentMethod = wallet.name;
-      } else {
-        nextPaymentMethod = "cash";
-      }
+    const paymentInputChanged =
+      hasBodyField(body, "payments") ||
+      hasBodyField(body, "paymentMethodId") ||
+      hasBodyField(body, "paidAmount") ||
+      hasBodyField(body, "isDebt");
+    const fallbackPaymentMethodId = body.paymentMethodId
+      ? Number(body.paymentMethodId)
+      : getRefId(oldOrder.paymentMethodId) || null;
+    const fallbackPaidAmount = hasBodyField(body, "paidAmount")
+      ? Number(body.paidAmount || 0)
+      : nextTotal;
+    const paymentSource = hasBodyField(body, "payments")
+      ? body.payments
+      : paymentInputChanged && fallbackPaymentMethodId
+        ? [{ paymentMethodId: fallbackPaymentMethodId, amount: fallbackPaidAmount }]
+        : oldOrder.payments || [];
+
+    let paymentInfo;
+    try {
+      paymentInfo = await normalizeOrderPayments({
+        payments: paymentSource,
+        paymentMethodId: fallbackPaymentMethodId,
+        fallbackAmount: fallbackPaidAmount,
+        total: nextTotal,
+        status: nextStatus,
+        isDebt: Boolean(body.isDebt ?? oldOrder.isDebt),
+        customer: body.customer || oldOrder.customer,
+      });
+    } catch (error: any) {
+      await applyOrderEffects(oldOrder, currentUser);
+      return errorResponse(error.message || "بيانات الدفع غير صحيحة", 400);
     }
 
     const updateBody = {
@@ -315,8 +488,14 @@ export async function PUT(
       weightItems,
       status: nextStatus,
       order_type: nextOrderType,
-      paymentMethod: nextPaymentMethod,
-      paymentMethodId: nextPaymentMethodId,
+      paymentMethod: paymentInfo.paymentMethod,
+      paymentMethodId: paymentInfo.paymentMethodId,
+      payments: paymentInfo.payments,
+      paidAmount: paymentInfo.paidAmount,
+      debtAmount: paymentInfo.debtAmount,
+      remainingAmount: paymentInfo.remainingAmount,
+      isDebt: paymentInfo.isDebt,
+      debtStatus: paymentInfo.debtStatus,
       subtotal,
       shipping,
       priceDiff,
@@ -325,7 +504,7 @@ export async function PUT(
         value: discountValue,
         amount: discountAmount,
       },
-      total: Math.max(0, subtotal - discountAmount + shipping + priceDiff),
+      total: nextTotal,
     };
 
     const updatedOrder = await Order.findByIdAndUpdate(id, updateBody, {

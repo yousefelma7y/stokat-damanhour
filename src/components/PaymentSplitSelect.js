@@ -43,6 +43,8 @@ const PaymentSplitSelect = ({
     label = "وسيلة الدفع",
     className = "",
     onValidationChange,
+    allowPartial = false,
+    autoSelectFull = true,
 }) => {
     const [methods, setMethods] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -67,7 +69,7 @@ const PaymentSplitSelect = ({
 
     // Auto-select first method with full amount when methods load
     useEffect(() => {
-        if (methods.length > 0 && payments.length === 0 && totalAmount > 0) {
+        if (autoSelectFull && methods.length > 0 && payments.length === 0 && totalAmount > 0) {
             const first = methods[0];
             setPayments([
                 {
@@ -77,15 +79,18 @@ const PaymentSplitSelect = ({
                 },
             ]);
         }
-    }, [methods]);
+    }, [methods, autoSelectFull, payments.length, setPayments, totalAmount]);
 
     // When totalAmount changes and we have a single payment, auto-update its amount
     useEffect(() => {
-        if (payments.length === 1 && !isSplitMode && totalAmount > 0) {
+        if (autoSelectFull && payments.length === 1 && !isSplitMode && totalAmount > 0) {
+            if (Math.abs((Number(payments[0].amount) || 0) - totalAmount) < 0.01) {
+                return;
+            }
             const updated = [{ ...payments[0], amount: totalAmount }];
             setPayments(updated);
         }
-    }, [totalAmount]);
+    }, [autoSelectFull, isSplitMode, payments, setPayments, totalAmount]);
 
     // Detect split mode from existing payments
     useEffect(() => {
@@ -108,7 +113,7 @@ const PaymentSplitSelect = ({
         if (onValidationChange) {
             onValidationChange({ isBalanced, isOverpaid, remaining, paidTotal });
         }
-    }, [isBalanced, isOverpaid, remaining, paidTotal]);
+    }, [isBalanced, isOverpaid, remaining, paidTotal, onValidationChange]);
 
     // ─── Single mode: Select one wallet for the full amount ───
     const handleSelectSingle = (method) => {
@@ -119,6 +124,36 @@ const PaymentSplitSelect = ({
                 amount: totalAmount,
             },
         ]);
+    };
+
+    const handleSingleAmountChange = (newAmount) => {
+        const amount = parseFloat(newAmount);
+        if (amount < 0) return;
+
+        if (!payments[0]) {
+            const first = methods[0];
+            if (!first) return;
+            setPayments([
+                {
+                    paymentMethodId: first._id,
+                    name: first.name,
+                    amount: amount || 0,
+                },
+            ]);
+            return;
+        }
+
+        setPayments([{ ...payments[0], amount: amount || 0 }]);
+    };
+
+    const handleSingleAmountBlur = () => {
+        if (!payments[0]) return;
+        const amount = Math.min(totalAmount, Math.max(0, parseFloat(payments[0].amount) || 0));
+        if (amount <= 0 && allowPartial) {
+            setPayments([]);
+            return;
+        }
+        setPayments([{ ...payments[0], amount: parseFloat(amount.toFixed(2)) }]);
     };
 
     // ─── Split mode helpers ───
@@ -257,19 +292,51 @@ const PaymentSplitSelect = ({
                                         <p className="font-semibold text-xs truncate">
                                             {method.name}
                                         </p>
-                                        {showBalance && (
-                                            <p
-                                                className={`text-[10px] font-medium ${isSelected ? "text-indigo-500" : "text-slate-400"
-                                                    }`}
-                                            >
-                                                {Number(method.balance).toLocaleString()} ج.م
-                                            </p>
-                                        )}
+
                                     </div>
                                 </button>
                             );
                         })}
                     </div>
+
+                    {allowPartial && payments[0] && (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
+                            <label className="block text-xs font-bold text-amber-800">
+                                المبلغ المدفوع الآن
+                            </label>
+                            <div className="relative">
+                                <input
+                                    type="number"
+                                    value={payments[0]?.amount ?? ""}
+                                    onChange={(e) => handleSingleAmountChange(e.target.value)}
+                                    onBlur={handleSingleAmountBlur}
+                                    min="0"
+                                    max={totalAmount}
+                                    step="0.01"
+                                    className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 pl-12 text-sm font-bold outline-none focus:border-amber-500"
+                                />
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-500 font-bold">
+                                    ج.م
+                                </span>
+                            </div>
+                        </div>
+                    )}
+
+                    {allowPartial && payments.length === 0 && (
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
+                            لم يتم تسجيل دفعة الآن، وسيتم ترحيل الإجمالي كمديونية.
+                        </div>
+                    )}
+
+                    {allowPartial && (
+                        <button
+                            type="button"
+                            onClick={() => setPayments([])}
+                            className="w-full rounded-lg border border-amber-200 bg-white py-2 text-xs font-bold text-amber-700 hover:bg-amber-50 transition-colors"
+                        >
+                            بدون دفع الآن
+                        </button>
+                    )}
 
                     {/* Split toggle */}
                     {methods.length > 1 && totalAmount > 0 && (
@@ -312,9 +379,9 @@ const PaymentSplitSelect = ({
                                         {available.map((m) => (
                                             <option key={m._id} value={m._id}>
                                                 {m.name}
-                                                {showBalance
+                                                {/* {showBalance
                                                     ? ` (${Number(m.balance).toLocaleString()} ج.م)`
-                                                    : ""}
+                                                    : ""} */}
                                             </option>
                                         ))}
                                     </select>

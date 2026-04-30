@@ -34,11 +34,15 @@ export async function GET(request: NextRequest) {
     }
 
     const skip = (page - 1) * limit;
-    const total = await Product.countDocuments(filter);
-    const data = await Product.find(filter)
-      .skip(skip)
-      .limit(limit)
-      .sort({ createdAt: -1 });
+    const [total, data] = await Promise.all([
+      Product.countDocuments(filter),
+      Product.find(filter)
+        .select("_id name model size price stock barcode category")
+        .skip(skip)
+        .limit(limit)
+        .sort({ createdAt: -1 })
+        .lean(),
+    ]);
 
     return successResponse(data, "Products retrieved", {
       page,

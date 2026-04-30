@@ -3,10 +3,11 @@ import Account from "@/models/Account";
 import Activity from "@/models/Activity";
 import Customer from "@/models/Customer";
 import Order from "@/models/Order";
+import PaymentMethod from "@/models/PaymentMethod";
 import Product from "@/models/Product";
 import Transaction from "@/models/Transaction";
-import PaymentMethod from "@/models/PaymentMethod";
 import WeightProduct from "@/models/WeightProduct";
+import { normalizeOrderPayments, roundMoney } from "@/lib/order-payments";
 import { CreateOrderInput } from "@/validations/order.schema";
 
 export class OrderService {
@@ -37,7 +38,7 @@ export class OrderService {
                 location: data.customer.location || "",
               },
             ],
-            { session },
+            { session, ordered: true },
           );
         }
 
@@ -53,44 +54,52 @@ export class OrderService {
         await this.validateInventory(data, session);
       }
 
-      const normalizedItems = (data.items || []).map((item) => ({
-        ...item,
-        total: item.total ?? item.quantity * item.price,
-      }));
-
-      const normalizedWeightItems = (data.weightItems || []).map((item) => ({
-        ...item,
-        total: item.total ?? item.weight * item.pricePerKg,
-      }));
+      const totals = this.normalizeOrderTotals(data);
 
       const orderNumber =
         data.orderNumber ||
         `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
-      let walletName = "cash";
-      if (data.paymentMethodId) {
-        const wallet = await PaymentMethod.findById(data.paymentMethodId).session(session);
-        if (wallet) walletName = wallet.name;
-      }
+      const paymentInfo = await normalizeOrderPayments({
+        payments: data.payments,
+        paymentMethodId: data.paymentMethodId,
+        fallbackAmount: data.paidAmount || totals.total,
+        total: totals.total,
+        status: data.status,
+        isDebt: data.isDebt,
+        customer: customerId || data.customer,
+        session,
+      });
 
       const [order] = await Order.create(
         [
           {
             ...data,
+            ...totals,
             orderNumber,
             customer: customerId,
-            paymentMethod: walletName,
-            paymentMethodId: data.paymentMethodId || null,
-            items: normalizedItems,
-            weightItems: normalizedWeightItems,
+            paymentMethod: paymentInfo.paymentMethod,
+            paymentMethodId: paymentInfo.paymentMethodId,
+            payments: paymentInfo.payments,
+            paidAmount: paymentInfo.paidAmount,
+            debtAmount: paymentInfo.debtAmount,
+            remainingAmount: paymentInfo.remainingAmount,
+            isDebt: paymentInfo.isDebt,
+            debtStatus: paymentInfo.debtStatus,
             createdBy,
           },
         ],
-        { session },
+        { session, ordered: true },
       );
 
       if (data.status === "completed") {
-        await this.applyOrderSideEffects(order, customerName, createdBy, session);
+        await this.applyOrderSideEffects(
+          order,
+          customerName,
+          createdBy,
+          paymentInfo,
+          session,
+        );
       }
 
       await session.commitTransaction();
@@ -123,10 +132,67 @@ export class OrderService {
     }
   }
 
+  private static normalizeOrderTotals(data: CreateOrderInput) {
+    const items = (data.items || []).map((item) => {
+      const quantity = Number(item.quantity || 0);
+      const price = Number(item.price || 0);
+
+      return {
+        ...item,
+        quantity,
+        price,
+        total: roundMoney(quantity * price),
+      };
+    });
+
+    const weightItems = (data.weightItems || []).map((item) => {
+      const weight = Number(item.weight || 0);
+      const pricePerKg = Number(item.pricePerKg || 0);
+
+      return {
+        ...item,
+        weight,
+        pricePerKg,
+        total: roundMoney(weight * pricePerKg),
+      };
+    });
+
+    const subtotal = roundMoney(
+      items.reduce((sum, item) => sum + Number(item.total || 0), 0) +
+        weightItems.reduce((sum, item) => sum + Number(item.total || 0), 0),
+    );
+    const discountType = data.discount?.type || "fixed";
+    const discountValue = Number(data.discount?.value || 0);
+    const discountAmount =
+      discountType === "percentage"
+        ? Math.min(subtotal, roundMoney((subtotal * discountValue) / 100))
+        : Math.min(subtotal, roundMoney(discountValue));
+    const shipping = roundMoney(Number(data.shipping || 0));
+    const priceDiff = roundMoney(Number(data.priceDiff || 0));
+    const total = roundMoney(
+      Math.max(0, subtotal - discountAmount + shipping + priceDiff),
+    );
+
+    return {
+      items,
+      weightItems,
+      subtotal,
+      shipping,
+      priceDiff,
+      discount: {
+        type: discountType,
+        value: discountValue,
+        amount: discountAmount,
+      },
+      total,
+    };
+  }
+
   private static async applyOrderSideEffects(
     order: any,
     customerName: string,
     createdBy: string,
+    paymentInfo: any,
     session: mongoose.ClientSession,
   ) {
     let totalGain = 0;
@@ -147,12 +213,44 @@ export class OrderService {
       totalGain += item.total || item.weight * item.pricePerKg;
     }
 
-    if (order.customer) {
+    const checkoutPayments =
+      order.payments && order.payments.length > 0
+        ? order.payments
+        : order.paymentMethodId && Number(order.paidAmount || 0) > 0
+          ? [
+              {
+                paymentMethodId: order.paymentMethodId,
+                name: order.paymentMethod,
+                amount: order.paidAmount,
+              },
+            ]
+          : [];
+    const paidAtCheckout = roundMoney(
+      checkoutPayments.reduce(
+        (sum: number, payment: any) => sum + Number(payment.amount || 0),
+        0,
+      ),
+    );
+    // Source of truth for debt and payments should be the order document itself
+    const remainingAmount = roundMoney(Number(order.remainingAmount || paymentInfo?.remainingAmount || 0));
+    const debtAmount = roundMoney(Number(order.debtAmount || paymentInfo?.debtAmount || 0));
+    const paidAmount = roundMoney(Number(order.paidAmount || paymentInfo?.paidAmount || 0));
+
+    const customerId =
+      order.customer?._id ?? order.customer?.id ?? order.customer;
+
+    if (customerId) {
       await Customer.findByIdAndUpdate(
-        order.customer,
+        customerId,
         {
           $push: { completedOrders: order._id },
-          $inc: { totalPayments: order.total },
+          $inc: {
+            // totalPayments should reflect actual cash received (paidAmount), not order total
+            totalPayments: paidAmount,
+            debtBalance: remainingAmount,
+            totalDebt: debtAmount,
+          },
+          $set: { updatedAt: new Date() }
         },
         { session },
       );
@@ -170,40 +268,51 @@ export class OrderService {
       });
     }
 
-    systemAccount.currentBalance += order.total || 0;
-    systemAccount.totalCredits += order.total || 0;
-    await systemAccount.save({ session });
+    const transactions = [];
+    let runningBalance = Number(systemAccount.currentBalance || 0);
+    for (const payment of checkoutPayments) {
+      const amount = roundMoney(Number(payment.amount || 0));
+      if (amount <= 0) continue;
 
-    if (order.paymentMethodId) {
-      const wallet = await PaymentMethod.findById(order.paymentMethodId).session(session);
-      if (wallet) {
-        wallet.balance += order.total || 0;
-        await wallet.save({ session });
+      runningBalance = roundMoney(runningBalance + amount);
+
+      if (payment.paymentMethodId) {
+        await PaymentMethod.findByIdAndUpdate(
+          payment.paymentMethodId,
+          { $inc: { balance: amount } },
+          { session },
+        );
       }
+
+      transactions.push({
+        transactionId: `TXN-ORD-${order._id}-${payment.paymentMethodId}-${Date.now()}`,
+        type: "income",
+        category: "sales",
+        from: `Customer: ${customerName}`,
+        to: "system",
+        amount,
+        gain:
+          paidAtCheckout > 0
+            ? roundMoney((totalGain * amount) / paidAtCheckout)
+            : 0,
+        balanceAfter: runningBalance,
+        description: `اوردر رقم #${order._id} (${payment.name || order.paymentMethod})`,
+        status: "completed",
+        relatedModel: "Order",
+        relatedId: order._id,
+        paymentMethod: payment.name || order.paymentMethod,
+        paymentMethodId: payment.paymentMethodId || null,
+        createdBy,
+      });
     }
 
-    await Transaction.create(
-      [
-        {
-          transactionId: `TXN-ORD-${order._id}-${Date.now()}`,
-          type: "income",
-          category: "sales",
-          from: `Customer: ${customerName}`,
-          to: "system",
-          amount: order.total || 0,
-          gain: totalGain,
-          balanceAfter: systemAccount.currentBalance,
-          description: `اوردر رقم #${order._id} (${order.paymentMethod})`,
-          status: "completed",
-          relatedModel: "Order",
-          relatedId: order._id,
-          paymentMethod: order.paymentMethod,
-          paymentMethodId: order.paymentMethodId || null,
-          createdBy,
-        },
-      ],
-      { session },
-    );
+    systemAccount.currentBalance = runningBalance;
+    systemAccount.totalCredits += paidAtCheckout;
+    await systemAccount.save({ session });
+
+    if (transactions.length > 0) {
+      await Transaction.create(transactions, { session, ordered: true });
+    }
 
     await Activity.create(
       [
@@ -213,10 +322,15 @@ export class OrderService {
           createdBy,
           severity: "success",
           details: `Order #${order._id} for ${customerName} processed successfully.`,
-          metadata: { orderId: order._id, total: order.total },
+          metadata: {
+            orderId: order._id,
+            total: order.total,
+            paidAmount: paidAtCheckout,
+            remainingAmount,
+          },
         },
       ],
-      { session },
+      { session, ordered: true },
     );
   }
 }

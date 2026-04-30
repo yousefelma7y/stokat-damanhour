@@ -121,6 +121,7 @@ const Sidebar = ({ }) => {
       active: "orders",
       href: "/dashboard/orders",
     },
+
     {
       id: 18,
       label: "الوزن",
@@ -206,6 +207,13 @@ const Sidebar = ({ }) => {
     //   active: "payment-methods",
     //   href: "/dashboard/payment-methods",
     // },
+    {
+      id: 19,
+      label: "المديونية",
+      icon: HandCoins,
+      active: "debts",
+      href: "/dashboard/debts",
+    },
     {
       id: 13,
       label: "الحسابات",

@@ -79,6 +79,12 @@ export async function GET(request: NextRequest) {
     }
 
     const skip = (page - 1) * limit;
+    const reversalCategories = [
+      "adjustment",
+      "cancelled_order",
+      "debt_settlement_refund",
+    ];
+    const settledStatuses = ["completed", "cancelled"];
 
     // Calculate stats for the filtered results
     const stats = await Transaction.aggregate([
@@ -101,8 +107,8 @@ export async function GET(request: NextRequest) {
                     {
                       $and: [
                         { $eq: ["$type", "payment"] },
-                        { $eq: ["$category", "adjustment"] },
-                        { $eq: ["$status", "completed"] },
+                        { $in: ["$category", reversalCategories] },
+                        { $in: ["$status", settledStatuses] },
                       ],
                     },
                     { $multiply: ["$amount", -1] },
@@ -118,7 +124,7 @@ export async function GET(request: NextRequest) {
                 {
                   $and: [
                     { $eq: ["$type", "payment"] },
-                    { $ne: ["$category", "adjustment"] },
+                    { $not: [{ $in: ["$category", reversalCategories] }] },
                     { $eq: ["$status", "completed"] },
                   ],
                 },

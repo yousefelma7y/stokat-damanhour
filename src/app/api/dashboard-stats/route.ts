@@ -27,11 +27,16 @@ export async function GET(request: NextRequest) {
     const startDate = startDateParam
       ? startOfDay(new Date(startDateParam))
       : startOfDay(subDays(endDate, 30));
+    const reversalCategories = [
+      "adjustment",
+      "cancelled_order",
+      "debt_settlement_refund",
+    ];
 
     // 0. Get Transactions within range
     const transactions = await Transaction.find({
       createdAt: { $gte: startDate, $lte: endDate },
-      status: "completed",
+      status: { $in: ["completed", "cancelled"] },
     }).sort({ createdAt: 1 });
 
     // 1. Calculate financial sums from Transactions
@@ -41,10 +46,11 @@ export async function GET(request: NextRequest) {
     let totalGain = 0; // Net gain from all TXNs
 
     transactions.forEach((t) => {
+      const isReversal = reversalCategories.includes(t.category || "");
       if (t.type === "income") {
         totalIncome += t.amount || 0;
       } else if (t.type === "payment") {
-        if (t.category === "adjustment") {
+        if (isReversal) {
           // Adjustments (like order reverts) subtract from income rather than increasing expenses
           totalIncome -= t.amount || 0;
         } else {
@@ -108,10 +114,11 @@ export async function GET(request: NextRequest) {
       const d = format(t.createdAt, "yyyy-MM-dd");
       if (dailyDataMap.has(d)) {
         const item = dailyDataMap.get(d);
+        const isReversal = reversalCategories.includes(t.category || "");
         if (t.type === "income") {
           item.income += t.amount || 0;
         } else if (t.type === "payment") {
-          if (t.category === "adjustment") {
+          if (isReversal) {
             item.income -= t.amount || 0; // Subtract from income
           } else {
             item.expenses += t.amount || 0;

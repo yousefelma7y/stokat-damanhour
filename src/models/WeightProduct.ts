@@ -28,6 +28,7 @@ WeightProductSchema.pre("save", async function (next) {
 });
 
 WeightProductSchema.index({ name: "text" });
+WeightProductSchema.index({ isActive: 1, createdAt: -1 });
 
 if (mongoose.models.WeightProduct) {
   delete mongoose.models.WeightProduct;

@@ -11,6 +11,7 @@ const PAYMENT_METHOD_LABELS = {
   transfer: "تحويل",
   wallet: "محفظة",
   mixed: "مختلط",
+  debt: "مديونية",
 };
 
 const PRINT_STYLES = `
@@ -360,6 +361,38 @@ const getTotals = (order) => {
   ];
 };
 
+const getPaidAmount = (order) => {
+  const explicitPaid = Number(order?.paidAmount || 0);
+  if (explicitPaid > 0) return explicitPaid;
+
+  const paymentRowsTotal = (order?.payments || []).reduce(
+    (sum, payment) => sum + Number(payment.amount || 0),
+    0,
+  );
+  if (paymentRowsTotal > 0) return paymentRowsTotal;
+
+  if (order?.status === "completed" && Number(order?.remainingAmount || 0) <= 0) {
+    return Number(order?.total || 0);
+  }
+
+  return 0;
+};
+
+const getReceiptPaymentRows = (order) => {
+  if (order?.payments?.length) return order.payments;
+  const paidAmount = getPaidAmount(order);
+  if (order?.paymentMethodId && paidAmount > 0) {
+    return [
+      {
+        paymentMethodId: order.paymentMethodId,
+        name: order.paymentMethod,
+        amount: paidAmount,
+      },
+    ];
+  }
+  return [];
+};
+
 const waitForPrintResources = async (printDocument) => {
   const images = Array.from(printDocument.images || []);
 
@@ -508,7 +541,9 @@ const OrderReceipt = ({ order, isGift, user, storeSettings }) => {
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
             <span style={{ fontWeight: '900', color: '#000' }}>الدفع:</span>
             <span style={{ fontWeight: '700', color: '#000' }}>
-              {getPaymentMethodLabel(order?.paymentMethod)}
+              {order?.payments?.length > 1
+                ? "مختلط"
+                : getPaymentMethodLabel(order?.paymentMethod)}
             </span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
@@ -666,6 +701,48 @@ const OrderReceipt = ({ order, isGift, user, storeSettings }) => {
               <span>الإجمالي:</span>
               <span dir="ltr">{formatCurrency(order?.total)} ج.م</span>
             </div>
+
+            {getReceiptPaymentRows(order).map((payment, index) => (
+              <div key={`${payment.paymentMethodId}-${index}`} style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontSize: '11px',
+                fontWeight: '700',
+                color: '#000',
+                marginTop: '3px',
+              }}>
+                <span>{payment.name || "مدفوع"}:</span>
+                <span dir="ltr">{formatCurrency(payment.amount)} ج.م</span>
+              </div>
+            ))}
+
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              fontSize: '11px',
+              fontWeight: '900',
+              color: '#000',
+              marginTop: '3px',
+            }}>
+              <span>المدفوع:</span>
+              <span dir="ltr">{formatCurrency(getPaidAmount(order))} ج.م</span>
+            </div>
+
+            {Number(order?.remainingAmount || 0) > 0 && (
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontSize: '12px',
+                fontWeight: '900',
+                color: '#000',
+                marginTop: '3px',
+                borderTop: '1px dashed #000',
+                paddingTop: '3px',
+              }}>
+                <span>مديونية:</span>
+                <span dir="ltr">{formatCurrency(order.remainingAmount)} ج.م</span>
+              </div>
+            )}
           </div>
         )}
 

@@ -111,6 +111,7 @@ const TransactionRow = ({ transaction, onViewDetails }) => {
       completed: "bg-emerald-100 text-emerald-800",
       pending: "bg-amber-100 text-amber-800",
       failed: "bg-red-100 text-red-800",
+      cancelled: "bg-red-100 text-red-800",
     };
     return colors[status] || "bg-slate-100 text-slate-800";
   };
@@ -118,6 +119,18 @@ const TransactionRow = ({ transaction, onViewDetails }) => {
   // Determine visual direction
   const isTransfer = transaction.type === "transfer";
   const isOutgoing = transaction.type === "payment";
+  const isCancelledOrder = transaction.category === "cancelled_order";
+  const isDebtSettlementRefund =
+    transaction.category === "debt_settlement_refund";
+  const transactionLabel = isTransfer
+    ? "تحويل"
+    : isDebtSettlementRefund
+      ? "رد تسوية"
+    : isCancelledOrder
+      ? "إلغاء طلب"
+      : isOutgoing
+        ? "صرف"
+        : "تحصيل";
 
   return (
     <div
@@ -183,7 +196,7 @@ const TransactionRow = ({ transaction, onViewDetails }) => {
               {transaction.amount.toLocaleString()} EGP
             </p>
             <p className="mt-0.5 sm:mt-1 text-[10px] text-slate-500 sm:text-xs">
-              {isTransfer ? "تحويل" : isOutgoing ? "صرف" : "تحصيل"}
+              {transactionLabel}
             </p>
           </div>
 
@@ -198,11 +211,16 @@ const TransactionRow = ({ transaction, onViewDetails }) => {
             {transaction.status === "pending" && (
               <Clock className="inline mr-1 w-3 h-3" />
             )}
+            {transaction.status === "cancelled" && (
+              <X className="inline mr-1 w-3 h-3" />
+            )}
             {transaction.status === "completed"
               ? "مكتملة"
               : transaction.status === "pending"
                 ? "معلقة"
-                : "فشلت"}
+                : transaction.status === "cancelled"
+                  ? "طلب ملغي"
+                  : "فشلت"}
           </div>
         </div>
       </div>
@@ -489,6 +507,34 @@ const DetailsModal = ({ isOpen, onClose, transaction }) => {
 
   const isOutgoing = transaction.type === "payment";
   const isTransfer = transaction.type === "transfer";
+  const isCancelledOrder = transaction.category === "cancelled_order";
+  const isDebtSettlementRefund =
+    transaction.category === "debt_settlement_refund";
+  const transactionLabel = isTransfer
+    ? "تحويل"
+    : isDebtSettlementRefund
+      ? "رد تسوية"
+    : isCancelledOrder
+      ? "إلغاء طلب"
+      : isOutgoing
+        ? "صرف"
+        : "تحصيل";
+  const categoryLabels = {
+    cancelled_order: "إلغاء طلب",
+    debt_settlement_refund: "رد تسوية مديونية",
+    adjustment: "تعديل",
+    debt_settlement: "تسوية مديونية",
+    sales: "مبيعات",
+    income: "تحصيل",
+    expense: "صرف",
+    transfer: "تحويل",
+  };
+  const statusLabels = {
+    completed: "مكتملة",
+    pending: "معلقة",
+    failed: "فشلت",
+    cancelled: "طلب ملغي",
+  };
 
   return (
     <div className="z-50 fixed inset-0 flex justify-center items-end sm:items-center bg-black/50 p-0 sm:p-4">
@@ -553,17 +599,13 @@ const DetailsModal = ({ isOpen, onClose, transaction }) => {
             <div>
               <p className="mb-1 text-slate-600 text-xs">النوع</p>
               <p className="font-semibold text-slate-900">
-                {isTransfer
-                  ? "تحويل"
-                  : transaction.type === "payment"
-                    ? "صرف"
-                    : "تحصيل"}
+                {transactionLabel}
               </p>
             </div>
             <div>
               <p className="mb-1 text-slate-600 text-xs">الفئة</p>
               <p className="font-semibold text-slate-900 capitalize">
-                {transaction.category || "-"}
+                {categoryLabels[transaction.category] || transaction.category || "-"}
               </p>
             </div>
             <div>
@@ -583,11 +625,7 @@ const DetailsModal = ({ isOpen, onClose, transaction }) => {
                       : "bg-red-100 text-red-800"
                 }`}
               >
-                {transaction.status === "completed"
-                  ? "مكتملة"
-                  : transaction.status === "pending"
-                    ? "معلقة"
-                    : "فشلت"}
+                {statusLabels[transaction.status] || transaction.status}
               </span>
             </div>
           </div>
@@ -652,7 +690,7 @@ const FilteredStatsSection = ({ stats, visible }) => {
         <div className="h-8 w-1 bg-blue-600 rounded-full"></div>
         <h2 className="font-bold text-slate-900 text-lg">تحليل النتائج المصفاة</h2>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <div className="bg-white p-4 border border-slate-100 rounded-2xl shadow-sm hover:shadow-md transition-all border-r-4 border-r-blue-500">
           <div className="flex items-center gap-3 mb-2">
             <div className="p-2 bg-blue-50 rounded-xl">
@@ -680,21 +718,12 @@ const FilteredStatsSection = ({ stats, visible }) => {
           </div>
           <p className="text-xl font-black text-red-600">{stats.totalExpenses.toLocaleString()} EGP</p>
         </div>
-        <div className="bg-white p-4 border border-slate-100 rounded-2xl shadow-sm hover:shadow-md transition-all border-r-4 border-r-sky-500">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-sky-50 rounded-xl">
-              <ArrowLeftRight className="w-4 h-4 text-sky-600" />
-            </div>
-            <span className="text-slate-500 text-xs font-bold">إجمالي التحويلات</span>
-          </div>
-          <p className="text-xl font-black text-sky-600">{stats.totalTransfers.toLocaleString()} EGP</p>
-        </div>
         <div className="bg-white p-4 border border-slate-100 rounded-2xl shadow-sm hover:shadow-md transition-all border-r-4 border-r-indigo-500">
           <div className="flex items-center gap-3 mb-2">
             <div className="p-2 bg-indigo-50 rounded-xl">
               <DollarSign className="w-4 h-4 text-indigo-600" />
             </div>
-            <span className="text-slate-500 text-xs font-bold">صافي الحركة</span>
+            <span className="text-slate-500 text-xs font-bold">صافي التقفيل</span>
           </div>
           <p className={`text-xl font-black ${stats.netChange >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
             {stats.netChange.toLocaleString()} EGP
@@ -709,13 +738,13 @@ const FilteredStatsSection = ({ stats, visible }) => {
 const transactionTypes = [
   { _id: "income", name: "تحصيل" },
   { _id: "payment", name: "صرف" },
-  { _id: "transfer", name: "تحويل" },
 ];
 
 const transactionStatuses = [
   { _id: "completed", name: "مكتملة" },
   { _id: "pending", name: "معلقة" },
   { _id: "failed", name: "فشلت" },
+  { _id: "cancelled", name: "طلب ملغي" },
 ];
 
 // ============ MAIN COMPONENT ============
