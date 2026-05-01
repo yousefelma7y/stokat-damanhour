@@ -321,7 +321,7 @@ const Sidebar = ({ }) => {
             <Link href="/dashboard" className="w-full px-2">
               <div
                 className={`mx-auto flex items-center transition-all duration-300 ${isOpen
-                  ? "w-full max-w-[220px] gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-3 shadow-sm"
+                  ? "w-full max-w-[220px] gap-3 px-3 py-3"
                   : "w-fit rounded-2xl bg-transparent p-1"
                   }`}
               >
