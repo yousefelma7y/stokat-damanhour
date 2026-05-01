@@ -200,13 +200,13 @@ const Sidebar = ({ }) => {
       href: "/dashboard/users",
     },
 
-    // {
-    //   id: 15,
-    //   label: "وسائل الدفع",
-    //   icon: Wallet,
-    //   active: "payment-methods",
-    //   href: "/dashboard/payment-methods",
-    // },
+    {
+      id: 15,
+      label: "وسائل الدفع",
+      icon: Wallet,
+      active: "payment-methods",
+      href: "/dashboard/payment-methods",
+    },
     {
       id: 19,
       label: "المديونية",

@@ -14,7 +14,7 @@ export interface IPaymentMethod extends Omit<Document, "_id"> {
 const PaymentMethodSchema = new Schema<IPaymentMethod>(
   {
     _id: Number,
-    name: { type: String, required: true, unique: true },
+    name: { type: String, required: true, trim: true },
     type: {
       type: String,
       enum: ["cash", "bank", "wallet", "other"],
@@ -25,6 +25,15 @@ const PaymentMethodSchema = new Schema<IPaymentMethod>(
   },
   { timestamps: true, _id: false },
 );
+
+PaymentMethodSchema.index(
+  { name: 1, isActive: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { isActive: true },
+  },
+);
+PaymentMethodSchema.index({ isActive: 1, createdAt: -1 });
 
 PaymentMethodSchema.pre("save", async function (next) {
   if (this.isNew && !this._id) {

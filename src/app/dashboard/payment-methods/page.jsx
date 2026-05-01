@@ -24,22 +24,17 @@ import { useDebounce } from "use-debounce";
 import ProtectedPage from "../../../components/ProtectedPage";
 import FiltersComponent from "../../../components/FiltersCombonent";
 
-// Validation Schema
 const ValidationSchema = Yup.object().shape({
-  name: Yup.string().required("اسم وسيلة الدفع مطلوب"),
+  name: Yup.string().trim().required("اسم وسيلة الدفع مطلوب"),
   type: Yup.string()
     .oneOf(["cash", "bank", "wallet", "other"], "نوع غير صالح")
     .required("نوع وسيلة الدفع مطلوب"),
-  balance: Yup.number()
-    .min(0, "الرصيد لا يمكن أن يكون أقل من صفر")
-    .required("الرصيد مطلوب"),
 });
 
 // Initial form values
 const initialFormValues = {
   name: "",
   type: "cash",
-  balance: 0,
 };
 
 const getMethodIcon = (type) => {
@@ -72,7 +67,6 @@ export default function PaymentMethods() {
   // filters
   const [search, setSearch] = useState("");
   const [searchValue] = useDebounce(search, 1000);
-  const [asOfDate, setAsOfDate] = useState("");
 
   const [methods, setMethods] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -91,9 +85,6 @@ export default function PaymentMethods() {
         const params = {
           search: searchValue,
         };
-        if (asOfDate) {
-          params.asOf = asOfDate;
-        }
         setIsLoading(true);
         const { data } = await axiosClient.get(`/payment-methods`, { params });
         setMethods(data.data);
@@ -109,19 +100,23 @@ export default function PaymentMethods() {
       }
     };
     fetchData();
-  }, [searchValue, asOfDate, refresh, mounted]);
+  }, [searchValue, refresh, mounted]);
 
   const handleSubmit = async (values, { setSubmitting, resetForm }) => {
     try {
       setLoadingBtn(true);
+      const payload = {
+        name: values.name,
+        type: values.type,
+      };
       if (editingMethod) {
         const { data } = await axiosClient.put(
           `/payment-methods/${editingMethod._id}`,
-          values,
+          payload,
         );
         setMessage({ type: "success", message: data.message });
       } else {
-        const { data } = await axiosClient.post(`/payment-methods`, values);
+        const { data } = await axiosClient.post(`/payment-methods`, payload);
         setMessage({ type: "success", message: data.message });
       }
       resetForm();
@@ -144,6 +139,11 @@ export default function PaymentMethods() {
   const handleEdit = (method) => {
     setEditingMethod(method);
     setShowModal(true);
+  };
+
+  const closeFormModal = () => {
+    setShowModal(false);
+    setEditingMethod(null);
   };
 
   const handleDelete = async () => {
@@ -181,8 +181,7 @@ export default function PaymentMethods() {
           open={showModal}
           setOpen={(val) => {
             if (!val) {
-              setShowModal(false);
-              setEditingMethod(null);
+              closeFormModal();
             }
           }}
         >
@@ -191,7 +190,7 @@ export default function PaymentMethods() {
               {editingMethod ? "تعديل وسيلة الدفع" : "إضافة وسيلة دفع جديدة"}
             </div>
             <div className="text-gray-500">
-              أدخل تفاصيل وسيلة الدفع (المحفظة) أدناه.
+              أدخل تفاصيل وسيلة الدفع أدناه.
             </div>
           </div>
           <Formik
@@ -200,7 +199,6 @@ export default function PaymentMethods() {
                 ? {
                     name: editingMethod?.name,
                     type: editingMethod?.type,
-                    balance: editingMethod?.balance,
                   }
                 : initialFormValues
             }
@@ -257,27 +255,10 @@ export default function PaymentMethods() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block mb-2 font-medium text-gray-700 text-sm">
-                    {editingMethod ? "الرصيد الحالي" : "الرصيد الافتتاحي"} *
-                  </label>
-                  <Field
-                    disabled={editingMethod}
-                    type="number"
-                    name="balance"
-                    className="px-4 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 w-full !text-end"
-                  />
-                  {errors.balance && touched.balance && (
-                    <div className="mt-1 text-red-500 text-xs">
-                      {errors.balance}
-                    </div>
-                  )}
-                </div>
-
                 <div dir="ltr" className="flex justify-between space-x-4 pt-4">
                   <Button
                     large
-                    onClick={() => setShowModal(false)}
+                    onClick={closeFormModal}
                     label={"إلغاء"}
                     variant="filled"
                     rounded="xl"
@@ -332,9 +313,6 @@ export default function PaymentMethods() {
           searchField
           search={search}
           setSearch={setSearch}
-          asOfDate
-          asOfDateValue={asOfDate}
-          setAsOfDateValue={setAsOfDate}
         />
 
         {isLoading ? (
@@ -343,7 +321,7 @@ export default function PaymentMethods() {
           <div className="">
             <ContentTable
               data={methods.map((method) => ({
-                _id: method._id,
+                id: method._id,
                 name: (
                   <div className="flex justify-center items-center gap-2">
                     {getMethodIcon(method.type)}
@@ -353,18 +331,6 @@ export default function PaymentMethods() {
                 type:
                   methodTypes.find((t) => t.value === method.type)?.label ||
                   method.type,
-                balance: (
-                  <span
-                    className={`font-bold ${asOfDate ? "text-amber-600" : "text-indigo-600"}`}
-                  >
-                    {Number(
-                      asOfDate && method.balanceAtDate !== undefined
-                        ? method.balanceAtDate
-                        : method.balance,
-                    ).toLocaleString()}{" "}
-                    {"\u062c.\u0645"}
-                  </span>
-                ),
                 createdAt: new Date(method.createdAt).toLocaleDateString(
                   "ar-EG",
                 ),
@@ -375,7 +341,7 @@ export default function PaymentMethods() {
                   label: null,
                   Icon: Edit,
                   action: (method) =>
-                    handleEdit(methods.find((m) => m._id === method._id)),
+                    handleEdit(methods.find((m) => m._id === method.id)),
                   props: {
                     color: "babyBlue",
                     variant: "filled",
@@ -385,7 +351,7 @@ export default function PaymentMethods() {
                 {
                   label: null,
                   Icon: Trash2,
-                  action: (method) => setDeleteModal(method._id),
+                  action: (method) => setDeleteModal(method.id),
                   props: { color: "danger", variant: "filled", rounded: "2xl" },
                 },
               ]}
@@ -393,9 +359,6 @@ export default function PaymentMethods() {
                 "id",
                 "\u0627\u0644\u0627\u0633\u0645",
                 "\u0627\u0644\u0646\u0648\u0639",
-                asOfDate
-                  ? "\u0627\u0644\u0631\u0635\u064a\u062f (\u062d\u062a\u0649 \u0627\u0644\u062a\u0627\u0631\u064a\u062e)"
-                  : "\u0627\u0644\u0631\u0635\u064a\u062f",
                 "\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0625\u0636\u0627\u0641\u0629",
               ]}
               hidePagination={true}

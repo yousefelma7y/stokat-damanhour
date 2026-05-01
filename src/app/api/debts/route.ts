@@ -17,10 +17,7 @@ export async function GET(request: NextRequest) {
 
     const filter: any = {
       isActive: true,
-      $or: [
-        { debtBalance: { $gt: 0.01 } },
-        { debtBalance: { $exists: false } } 
-      ]
+      debtBalance: { $gt: 0.01 }
     };
 
     if (search) {

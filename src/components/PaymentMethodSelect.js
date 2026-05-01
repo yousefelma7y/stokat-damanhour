@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Banknote, CreditCard, Wallet, LayoutGrid, ChevronDown, CheckCircle2 } from "lucide-react";
 import axiosClient from "@/lib/axios-client";
 import Cookies from "js-cookie";
@@ -16,6 +16,26 @@ const getMethodIcon = (type) => {
       return <LayoutGrid className="w-4 h-4" />;
   }
 };
+
+const METHOD_TYPE_ORDER = {
+  cash: 1,
+  bank: 2,
+  wallet: 3,
+  other: 4,
+};
+
+const sortPaymentMethods = (methods) =>
+  [...methods].sort((a, b) => {
+    const typeDiff =
+      (METHOD_TYPE_ORDER[a.type] || 99) - (METHOD_TYPE_ORDER[b.type] || 99);
+    if (typeDiff !== 0) return typeDiff;
+    return String(a.name || "").localeCompare(String(b.name || ""), "ar");
+  });
+
+const getDefaultMethod = (methods) =>
+  methods.find((method) => method.type === "cash" || method.name === "كاش") ||
+  methods[0] ||
+  null;
 
 /**
  * Reusable Payment Method Selector Component
@@ -47,11 +67,15 @@ const PaymentMethodSelect = ({
     const fetchMethods = async () => {
       try {
         const { data } = await axiosClient.get("/payment-methods");
-        setMethods(data.data || []);
+        const fetchedMethods = sortPaymentMethods(data.data || []);
+        setMethods(fetchedMethods);
         // Auto-select cash method first, otherwise fallback to first method
-        if (!value && data.data?.length > 0) {
-          const cashMethod = data.data.find(m => m.type === 'cash' || m.name === 'كاش') || data.data[0];
-          onChange?.(cashMethod._id, cashMethod);
+        const availableMethods = excludeId
+          ? fetchedMethods.filter((method) => method._id !== excludeId)
+          : fetchedMethods;
+        if (!value && availableMethods.length > 0) {
+          const defaultMethod = getDefaultMethod(availableMethods);
+          onChange?.(defaultMethod._id, defaultMethod);
         }
       } catch (error) {
         console.error("Error fetching payment methods:", error);
@@ -62,11 +86,28 @@ const PaymentMethodSelect = ({
     fetchMethods();
   }, []);
 
-  const filteredMethods = excludeId
-    ? methods.filter((m) => m._id !== excludeId)
-    : methods;
+  const filteredMethods = useMemo(
+    () => (excludeId ? methods.filter((m) => m._id !== excludeId) : methods),
+    [excludeId, methods],
+  );
 
-  const selectedMethod = methods.find((m) => m._id === value);
+  useEffect(() => {
+    if (isLoading || methods.length === 0) return;
+
+    const selectedIsExcluded = excludeId && value === excludeId;
+    const selectedStillAvailable = filteredMethods.some(
+      (method) => method._id === value,
+    );
+
+    if (!value || selectedIsExcluded || !selectedStillAvailable) {
+      const defaultMethod = getDefaultMethod(filteredMethods);
+      if (defaultMethod && defaultMethod._id !== value) {
+        onChange?.(defaultMethod._id, defaultMethod);
+      } else if (!defaultMethod && value) {
+        onChange?.(null, null);
+      }
+    }
+  }, [excludeId, filteredMethods, isLoading, methods.length, onChange, value]);
 
   if (isLoading) {
     return (

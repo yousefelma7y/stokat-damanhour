@@ -18,11 +18,16 @@ async function getNextSequence(modelName) {
 
 const PaymentMethodSchema = new mongoose.Schema({
     _id: Number,
-    name: { type: String, required: true, unique: true },
+    name: { type: String, required: true, trim: true },
     type: { type: String, enum: ["cash", "bank", "wallet", "other"], default: "cash" },
     balance: { type: Number, default: 0 },
     isActive: { type: Boolean, default: true },
 }, { timestamps: true, _id: false });
+
+PaymentMethodSchema.index(
+    { name: 1, isActive: 1 },
+    { unique: true, partialFilterExpression: { isActive: true } }
+);
 
 PaymentMethodSchema.pre('save', async function (next) {
     if (this.isNew && !this._id) {
@@ -49,6 +54,11 @@ async function seed() {
             if (!existing) {
                 await PaymentMethod.create(m);
                 console.log(`✅ Added ${m.name}`);
+            } else if (existing.isActive === false) {
+                existing.type = m.type;
+                existing.isActive = true;
+                await existing.save();
+                console.log(`✅ Reactivated ${m.name}`);
             } else {
                 console.log(`ℹ️ Already exists ${m.name}`);
             }

@@ -202,16 +202,24 @@ export async function POST(request: NextRequest) {
     // ========== HANDLE TRANSFER BETWEEN WALLETS ==========
     if (incomingType === "transfer") {
       const { fromWallet, toWallet, description } = body;
+      const fromWalletId = Number(fromWallet);
+      const toWalletId = Number(toWallet);
 
-      if (!fromWallet || !toWallet) {
+      if (!Number.isFinite(fromWalletId) || !Number.isFinite(toWalletId)) {
         return errorResponse("يجب تحديد المحفظة المصدر والمحفظة الهدف", 400);
       }
-      if (fromWallet === toWallet) {
+      if (fromWalletId === toWalletId) {
         return errorResponse("لا يمكن التحويل من محفظة لنفسها", 400);
       }
 
-      const sourceWallet = await PaymentMethod.findById(fromWallet);
-      const targetWallet = await PaymentMethod.findById(toWallet);
+      const sourceWallet = await PaymentMethod.findOne({
+        _id: fromWalletId,
+        isActive: true,
+      });
+      const targetWallet = await PaymentMethod.findOne({
+        _id: toWalletId,
+        isActive: true,
+      });
 
       if (!sourceWallet) {
         return errorResponse("المحفظة المصدر غير موجودة", 404);
@@ -319,16 +327,27 @@ export async function POST(request: NextRequest) {
     // ========== PAYMENT METHOD WALLET UPDATE ==========
     const paymentMethodId = body.paymentMethodId;
     if (paymentMethodId) {
-      const wallet = await PaymentMethod.findById(paymentMethodId);
-      if (wallet) {
-        if (isIncome) {
-          wallet.balance += amount;
-        } else {
-          wallet.balance -= amount;
-        }
-        await wallet.save();
-        body.paymentMethod = wallet.name;
+      const walletId = Number(paymentMethodId);
+      if (!Number.isFinite(walletId) || walletId <= 0) {
+        return errorResponse("وسيلة الدفع غير صالحة", 400);
       }
+
+      const wallet = await PaymentMethod.findOne({
+        _id: walletId,
+        isActive: true,
+      });
+      if (!wallet) {
+        return errorResponse("وسيلة الدفع غير موجودة", 404);
+      }
+
+      if (isIncome) {
+        wallet.balance += amount;
+      } else {
+        wallet.balance -= amount;
+      }
+      await wallet.save();
+      body.paymentMethod = wallet.name;
+      body.paymentMethodId = wallet._id;
     } else {
       // Fallback: if no payment method specified, default behavior
       body.paymentMethod = body.paymentMethod || "cash";

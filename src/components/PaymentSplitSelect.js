@@ -27,6 +27,26 @@ const getMethodIcon = (type) => {
     }
 };
 
+const METHOD_TYPE_ORDER = {
+    cash: 1,
+    bank: 2,
+    wallet: 3,
+    other: 4,
+};
+
+const sortPaymentMethods = (methods) =>
+    [...methods].sort((a, b) => {
+        const typeDiff =
+            (METHOD_TYPE_ORDER[a.type] || 99) - (METHOD_TYPE_ORDER[b.type] || 99);
+        if (typeDiff !== 0) return typeDiff;
+        return String(a.name || "").localeCompare(String(b.name || ""), "ar");
+    });
+
+const getDefaultMethod = (methods) =>
+    methods.find((method) => method.type === "cash" || method.name === "كاش") ||
+    methods[0] ||
+    null;
+
 /**
  * Payment Split Select — allows splitting order payments across multiple wallets.
  *
@@ -57,7 +77,7 @@ const PaymentSplitSelect = ({
         const fetchMethods = async () => {
             try {
                 const { data } = await axiosClient.get("/payment-methods");
-                setMethods(data.data || []);
+                setMethods(sortPaymentMethods(data.data || []));
             } catch (error) {
                 console.error("Error fetching payment methods:", error);
             } finally {
@@ -70,7 +90,7 @@ const PaymentSplitSelect = ({
     // Auto-select first method with full amount when methods load
     useEffect(() => {
         if (autoSelectFull && methods.length > 0 && payments.length === 0 && totalAmount > 0) {
-            const first = methods[0];
+            const first = getDefaultMethod(methods);
             setPayments([
                 {
                     paymentMethodId: first._id,
@@ -131,7 +151,7 @@ const PaymentSplitSelect = ({
         if (amount < 0) return;
 
         if (!payments[0]) {
-            const first = methods[0];
+            const first = getDefaultMethod(methods);
             if (!first) return;
             setPayments([
                 {

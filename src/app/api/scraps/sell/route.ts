@@ -53,13 +53,28 @@ export async function POST(request: NextRequest) {
 
     // 2.5 Update Payment Method (Wallet) balance
     let walletName = "cash";
+    let normalizedPaymentMethodId = null;
     if (paymentMethodId) {
-      const wallet = await PaymentMethod.findById(paymentMethodId);
-      if (wallet) {
-        wallet.balance += Number(price);
-        await wallet.save();
-        walletName = wallet.name;
+      normalizedPaymentMethodId = Number(paymentMethodId);
+      if (
+        !Number.isFinite(normalizedPaymentMethodId) ||
+        normalizedPaymentMethodId <= 0
+      ) {
+        return errorResponse("وسيلة الدفع غير صالحة", 400);
       }
+
+      const wallet = await PaymentMethod.findOne({
+        _id: normalizedPaymentMethodId,
+        isActive: true,
+      });
+      if (!wallet) {
+        return errorResponse("وسيلة الدفع غير موجودة", 404);
+      }
+
+      wallet.balance += Number(price);
+      await wallet.save();
+      walletName = wallet.name;
+      normalizedPaymentMethodId = wallet._id;
     }
 
     // 3. Create Transaction
@@ -78,7 +93,7 @@ export async function POST(request: NextRequest) {
       relatedModel: "Scrap",
       relatedId: scrap._id,
       paymentMethod: walletName,
-      paymentMethodId: paymentMethodId || null,
+      paymentMethodId: normalizedPaymentMethodId,
       createdBy: currentUser,
     });
 
@@ -89,7 +104,12 @@ export async function POST(request: NextRequest) {
       createdBy: currentUser,
       severity: "success",
       details: `تم بيع ${quantity} من ${scrap.name} بسعر ${price} ج.م عبر ${walletName}`,
-      metadata: { scrapId: scrap._id, quantity, price, paymentMethodId },
+      metadata: {
+        scrapId: scrap._id,
+        quantity,
+        price,
+        paymentMethodId: normalizedPaymentMethodId,
+      },
     });
 
     return successResponse(scrap, "تم عملية البيع بنجاح");
