@@ -26,7 +26,7 @@ import {
   UsersIcon,
 } from "@heroicons/react/24/outline";
 import Cookies from "js-cookie";
-import { Activity, BadgeX, Banknote, FactoryIcon, FolderOpenDot, HandCoins, Landmark, NotebookPen, Scale, Wallet } from "lucide-react";
+import { Activity, BadgeX, Banknote, CalendarClock, FactoryIcon, FolderOpenDot, HandCoins, Landmark, NotebookPen, Scale, Wallet } from "lucide-react";
 import axiosClient from "@/lib/axios-client";
 import { canAccessPage } from "@/lib/permissions";
 
@@ -220,6 +220,13 @@ const Sidebar = ({ }) => {
       icon: CreditCardIcon,
       active: "accounting",
       href: "/dashboard/accounting",
+    },
+    {
+      id: 20,
+      label: "المواسم",
+      icon: CalendarClock,
+      active: "seasons",
+      href: "/dashboard/seasons",
     },
     // {
     //   id: 14,

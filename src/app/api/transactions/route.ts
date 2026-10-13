@@ -7,6 +7,7 @@ import PaymentMethod from "@/models/PaymentMethod";
 import Customer from "@/models/Customer";
 import Activity from "@/models/Activity";
 import { getCurrentUserName } from "@/lib/get-current-user";
+import { applySeasonToFilter, resolveSeason } from "@/lib/seasons";
 import {
   successResponse,
   errorResponse,
@@ -59,6 +60,14 @@ export async function GET(request: NextRequest) {
         end.setHours(23, 59, 59, 999);
         filter.createdAt.$lte = end;
       }
+    }
+
+    // 3b. Season scope (only when asked: "current" or a season id).
+    // Without it the endpoint keeps returning every season, as other callers expect.
+    const seasonParam = searchParams.get("season");
+    if (seasonParam) {
+      const { season } = await resolveSeason(seasonParam);
+      applySeasonToFilter(filter, season);
     }
 
     // 4. Type/Category Filter

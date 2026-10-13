@@ -4,7 +4,14 @@ import Transaction from "@/models/Transaction";
 import Order from "@/models/Order";
 import Product from "@/models/Product";
 import Account from "@/models/Account";
-import { successResponse, handleError } from "@/lib/api-response";
+import WeightStockMovement from "@/models/WeightStockMovement";
+import {
+  getWeightMovementStats,
+  getWeightStock,
+  roundWeight,
+} from "@/lib/weight-stock";
+import { successResponse, errorResponse, handleError } from "@/lib/api-response";
+import { resolveSeason, seasonBounds } from "@/lib/seasons";
 import {
   startOfDay,
   endOfDay,
@@ -21,12 +28,24 @@ export async function GET(request: NextRequest) {
     const startDateParam = searchParams.get("startDate");
     const endDateParam = searchParams.get("endDate");
 
-    const endDate = endDateParam
+    // Everything on this endpoint is scoped to one season (the open one by default).
+    // scope=season → totals for the whole season instead of the last 30 days.
+    const { season, isCurrent } = await resolveSeason(searchParams.get("season"));
+    const bounds = seasonBounds(season);
+    const wholeSeason = searchParams.get("scope") === "season" || !isCurrent;
+
+    let endDate = endDateParam
       ? endOfDay(new Date(endDateParam))
       : endOfDay(new Date());
-    const startDate = startDateParam
+    if (bounds.end && endDate > bounds.end) endDate = bounds.end;
+
+    let startDate = startDateParam
       ? startOfDay(new Date(startDateParam))
-      : startOfDay(subDays(endDate, 30));
+      : wholeSeason
+        ? bounds.start
+        : startOfDay(subDays(endDate, 30));
+    if (startDate < bounds.start) startDate = bounds.start;
+    if (startDate > endDate) startDate = endDate;
     const reversalCategories = [
       "adjustment",
       "cancelled_order",
@@ -37,6 +56,7 @@ export async function GET(request: NextRequest) {
     const transactions = await Transaction.find({
       createdAt: { $gte: startDate, $lte: endDate },
       status: { $in: ["completed", "cancelled"] },
+      isActive: { $ne: false }, // deleted transactions already had their effect reverted
     }).sort({ createdAt: 1 });
 
     // 1. Calculate financial sums from Transactions
@@ -91,8 +111,11 @@ export async function GET(request: NextRequest) {
     ).length;
 
     // 4. System Balance
+    // 4. System Balance (live for the open season, saved closing balance for a closed one)
     const systemAccount = await Account.findOne({ accountType: "system" });
-    const currentBalance = systemAccount?.currentBalance || 0;
+    const currentBalance = isCurrent
+      ? systemAccount?.currentBalance || 0
+      : season.closing?.systemBalance || 0;
 
     // 5. Daily Data for Charts and Export
     const dateInterval = eachDayOfInterval({ start: startDate, end: endDate });
@@ -107,6 +130,8 @@ export async function GET(request: NextRequest) {
         orders: 0,
         ordersValue: 0,
         gain: 0,
+        weightSold: 0,
+        weightTransferred: 0,
       });
     });
 
@@ -138,10 +163,40 @@ export async function GET(request: NextRequest) {
       }
     });
 
+    // 5b. Weight storage (snapshot + movements in range)
+    const weightRange = { createdAt: { $gte: startDate, $lte: endDate } };
+    const [weightStock, weightStats, weightMovements] = await Promise.all([
+      getWeightStock(),
+      getWeightMovementStats(weightRange),
+      WeightStockMovement.find({
+        ...weightRange,
+        type: { $in: ["sale", "sale_return", "transfer"] },
+      })
+        .select("type status weight createdAt")
+        .lean(),
+    ]);
+
+    weightMovements.forEach((m: any) => {
+      const item = dailyDataMap.get(format(m.createdAt, "yyyy-MM-dd"));
+      if (!item) return;
+      if (m.type === "sale") item.weightSold += m.weight;
+      if (m.type === "sale_return") item.weightSold -= m.weight;
+      if (m.type === "transfer" && m.status === "completed") {
+        item.weightTransferred += m.weight;
+      }
+    });
+    dailyDataMap.forEach((item) => {
+      item.weightSold = roundWeight(item.weightSold);
+      item.weightTransferred = roundWeight(item.weightTransferred);
+    });
+
     const dailyStats = Array.from(dailyDataMap.values());
 
     // 6. Latest Transactions
-    const latestTransactions = await Transaction.find({})
+    const latestTransactions = await Transaction.find({
+      createdAt: { $gte: bounds.start, ...(bounds.end ? { $lte: bounds.end } : {}) },
+      isActive: { $ne: false },
+    })
       .sort({ createdAt: -1 })
       .limit(8);
 
@@ -160,20 +215,49 @@ export async function GET(request: NextRequest) {
           totalOrders,
           ordersValue,
           completedOrders,
-          inventoryValue: totalInventoryValue,
-          retailValue: totalRetailValue,
-          lowStockCount,
+          // Stock is a live snapshot; a closed season shows what was saved at close.
+          inventoryValue: isCurrent
+            ? totalInventoryValue
+            : season.closing?.productsStockValue || 0,
+          retailValue: isCurrent
+            ? totalRetailValue
+            : season.closing?.productsStockValue || 0,
+          lowStockCount: isCurrent ? lowStockCount : 0,
           totalGain,
           totalProductsCount: products.length,
           activeProductsCount: products.filter((p) => p.isActive).length,
         },
-        lowStockProducts,
+        season: {
+          _id: season._id,
+          name: season.name,
+          status: season.status,
+          startDate: season.startDate,
+          endDate: season.endDate || null,
+          isCurrent,
+          opening: season.opening,
+        },
+        range: { startDate, endDate },
+        lowStockProducts: isCurrent ? lowStockProducts : [],
+        weightStock: {
+          currentWeight: isCurrent
+            ? weightStock?.currentWeight || 0
+            : season.closing?.weightStockKg || 0,
+          lowStockThreshold: weightStock?.lowStockThreshold || 0,
+          isLow:
+            isCurrent &&
+            Number(weightStock?.currentWeight || 0) <=
+              Number(weightStock?.lowStockThreshold || 0),
+          ...weightStats,
+        },
         dailyStats,
         recentTransactions: latestTransactions,
       },
       "Dashboard stats retrieved",
     );
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.name === "SeasonError") {
+      return errorResponse(error.message, error.status);
+    }
     return handleError(error);
   }
 }

@@ -42,9 +42,23 @@ import {
   Filter,
   TrendingUpIcon,
   X,
+  Scale,
+  Truck,
+  Warehouse,
+  HandCoins,
 } from "lucide-react";
 import axiosClient from "@/lib/axios-client";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
+import { RowsSkeleton, Skeleton, Spinner } from "@/components/Skeleton";
+import SeasonSwitcher, {
+  ClosedSeasonBanner,
+  useSeasonParam,
+} from "@/components/seasons/SeasonSwitcher";
+
+const lastThirtyDays = () => ({
+  startDate: format(subDays(new Date(), 30), "yyyy-MM-dd"),
+  endDate: format(new Date(), "yyyy-MM-dd"),
+});
 
 // ============ COMPONENTS ============
 
@@ -56,13 +70,26 @@ const StatCard = ({
   trend,
   color,
   comparison,
+  loading = false,
 }) => (
-  <div className="bg-white hover:shadow-xl shadow-sm p-6 border border-slate-200 rounded-xl transition-all duration-300 hover:border-slate-300 group">
+  <div
+    aria-busy={loading}
+    className="bg-white hover:shadow-xl shadow-sm p-6 border border-slate-200 rounded-xl transition-all duration-300 hover:border-slate-300 group"
+  >
     <div className="flex justify-between items-start">
       <div className="flex-1">
         <p className="text-slate-600 text-sm font-medium mb-1">{title}</p>
-        <h3 className="text-slate-900 text-2xl font-bold mb-1">{value}</h3>
-        {subtitle && <p className="text-slate-500 text-xs">{subtitle}</p>}
+        {loading ? (
+          <div className="space-y-2 py-1">
+            <Skeleton className="h-7 w-32" />
+            <Skeleton className="h-3 w-24" />
+          </div>
+        ) : (
+          <>
+            <h3 className="text-slate-900 text-2xl font-bold mb-1">{value}</h3>
+            {subtitle && <p className="text-slate-500 text-xs">{subtitle}</p>}
+          </>
+        )}
         {trend !== undefined && (
           <div
             className={`flex items-center mt-2 text-xs font-semibold ${
@@ -79,7 +106,7 @@ const StatCard = ({
         )}
       </div>
       <div
-        className={`p-3 rounded-lg text-white group-hover:scale-110 transition-transform ${color}`}
+        className={`p-3 rounded-lg text-white group-hover:scale-110 transition-transform ${loading ? "bg-slate-300" : color}`}
       >
         <Icon className="w-6 h-6" />
       </div>
@@ -87,8 +114,16 @@ const StatCard = ({
   </div>
 );
 
-const ChartCard = ({ title, children, subtitle, icon: Icon, action }) => (
-  <div className="bg-white shadow-sm p-6 border border-slate-200 rounded-xl">
+const ChartCard = ({
+  title,
+  children,
+  subtitle,
+  icon: Icon,
+  action,
+  loading = false,
+  skeleton,
+}) => (
+  <div aria-busy={loading} className="bg-white shadow-sm p-6 border border-slate-200 rounded-xl">
     <div className="md:flex space-y-2 md:space-y-0 items-center justify-between mb-6">
       <div className="flex items-center gap-3 ">
         {Icon && <Icon className="w-5 h-5 text-blue-600" />}
@@ -101,7 +136,9 @@ const ChartCard = ({ title, children, subtitle, icon: Icon, action }) => (
       </div>
       {action && action}
     </div>
-    <div className="">{children}</div>
+    <div className="">
+      {loading ? skeleton || <Skeleton className="h-[280px] w-full rounded-xl" /> : children}
+    </div>
   </div>
 );
 
@@ -124,6 +161,7 @@ const TransactionRow = ({ transaction }) => {
   };
 
   const getArabicType = (type, category) => {
+    if (type === "income" && category === "weight_transfer") return "نقل وزن لمحل";
     if (type === "income") return "إيراد مبيعات";
     if (type === "expense") return "مصروفات عامة";
     if (type === "payment") {
@@ -201,13 +239,16 @@ const HealthMetricBar = ({ metric, value, status, color = "bg-blue-500" }) => {
   );
 };
 
+const formatKg = (value) =>
+  `${Number(value || 0).toLocaleString("ar-EG", { maximumFractionDigits: 3 })} كجم`;
+
 // ============ MAIN COMPONENT ============
 
 export default function ProfessionalFinancialDashboard() {
-  const [dateRange, setDateRange] = useState({
-    startDate: format(subDays(new Date(), 30), "yyyy-MM-dd"),
-    endDate: format(new Date(), "yyyy-MM-dd"),
-  });
+  const [dateRange, setDateRange] = useState(lastThirtyDays);
+  // null = current (open) season; an id = viewing a closed season read-only
+  const { seasonId, setSeasonId, ready: seasonReady } = useSeasonParam();
+  const [rangeReady, setRangeReady] = useState(false);
   const [filterType, setFilterType] = useState("all");
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -234,6 +275,7 @@ export default function ProfessionalFinancialDashboard() {
         params: {
           startDate: dateRange.startDate,
           endDate: dateRange.endDate,
+          season: seasonId || undefined,
         },
       });
       setStats(res.data.data);
@@ -244,9 +286,16 @@ export default function ProfessionalFinancialDashboard() {
     }
   };
 
+  // A closed season opens on its whole date range; the current one on the last 30 days.
   useEffect(() => {
-    fetchStats();
-  }, [dateRange]);
+    if (!seasonReady) return;
+    setDateRange(seasonId ? { startDate: "", endDate: "" } : lastThirtyDays());
+    setRangeReady(true);
+  }, [seasonId, seasonReady]);
+
+  useEffect(() => {
+    if (rangeReady) fetchStats();
+  }, [dateRange, rangeReady]);
 
   const exportToCSV = () => {
     if (!stats.dailyStats || stats.dailyStats.length === 0) return;
@@ -258,6 +307,8 @@ export default function ProfessionalFinancialDashboard() {
       "Orders",
       "Orders Value",
       "Profit",
+      "Weight Sold (kg)",
+      "Weight Transferred (kg)",
     ];
     const rows = stats.dailyStats.map((item) => [
       item.date,
@@ -266,6 +317,8 @@ export default function ProfessionalFinancialDashboard() {
       item.orders,
       item.ordersValue,
       item.gain,
+      item.weightSold || 0,
+      item.weightTransferred || 0,
     ]);
 
     const csvContent =
@@ -295,13 +348,9 @@ export default function ProfessionalFinancialDashboard() {
           return t.type === filterType;
         });
 
-  if (isLoading && !stats.dailyStats.length) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
+  // Data is "loading" from first paint until the first response, and on every refetch.
+  const loading = isLoading;
+  const weightStock = stats.weightStock || {};
 
   return (
     <div className="min-h-screen  pb-12" dir="rtl">
@@ -315,13 +364,24 @@ export default function ProfessionalFinancialDashboard() {
                 <BarChart3 className="w-6 h-6 text-red-400 group-hover:rotate-12 transition-transform" />
                 لوحة التحكم الإحصائية
               </h1>
-              <p className="text-blue-100 text-xs md:text-sm mt-0.5 opacity-90">
-                تحليل شامل للأداء المالي والعمليات
+              <p
+                className="text-blue-100 text-xs md:text-sm mt-0.5 opacity-90 flex items-center gap-2"
+                aria-live="polite"
+              >
+                {loading ? (
+                  <>
+                    <Spinner className="w-3.5 h-3.5" />
+                    جاري تحميل البيانات...
+                  </>
+                ) : (
+                  "تحليل شامل للأداء المالي والعمليات"
+                )}
               </p>
             </div>
 
             {/* Controls Section */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1 lg:flex-none">
+              <SeasonSwitcher value={seasonId} onChange={setSeasonId} tone="dark" />
               {/* Date Pickers Container */}
               <div className="flex items-center bg-white/10 md:bg-white rounded-xl border border-white/20 md:border-slate-200  p-1.5 shadow-inner flex-1 sm:flex-none">
                 <div className="flex items-center gap-2 md:px-2 flex-1">
@@ -365,7 +425,8 @@ export default function ProfessionalFinancialDashboard() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={exportToCSV}
-                  className="flex flex-1 sm:flex-none cursor-pointer items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm active:scale-95"
+                  disabled={loading}
+                  className="flex flex-1 sm:flex-none cursor-pointer items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
                   title="تصدير بيانات CSV"
                 >
                   <Download className="w-4 h-4" />
@@ -386,6 +447,10 @@ export default function ProfessionalFinancialDashboard() {
       </div>
 
       <div className="max-w-[1600px] mx-auto px-6 py-8 space-y-8">
+        {!loading && (
+          <ClosedSeasonBanner season={stats.season} onBack={() => setSeasonId(null)} />
+        )}
+
         {/* Section: Overview Metrics */}
         <div className="space-y-4">
           <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
@@ -394,6 +459,7 @@ export default function ProfessionalFinancialDashboard() {
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
+              loading={loading}
               title="إجمالي الدخل"
               value={`${stats.summary.totalIncome.toLocaleString()} ج.م`}
               icon={ArrowDownLeft}
@@ -401,6 +467,7 @@ export default function ProfessionalFinancialDashboard() {
               subtitle="خلال الفترة المختارة"
             />
             <StatCard
+              loading={loading}
               title="إجمالي النفقات"
               value={`${stats.summary.totalExpenses.toLocaleString()} ج.م`}
               icon={ArrowUpRight}
@@ -408,6 +475,7 @@ export default function ProfessionalFinancialDashboard() {
               subtitle="خلال الفترة المختارة"
             />
             <StatCard
+              loading={loading}
               title="صافي الأرباح"
               value={`${stats.summary.netProfit.toLocaleString()} ج.م`}
               icon={TrendingUp}
@@ -415,11 +483,18 @@ export default function ProfessionalFinancialDashboard() {
               subtitle="الأرباح المحققة فعلياً"
             />
             <StatCard
+              loading={loading}
               title="الرصيد الكلي"
               value={`${stats.summary.systemBalance.toLocaleString()} ج.م`}
               icon={Wallet}
               color="bg-purple-500"
-              subtitle="رصيد النظام الحالي"
+              subtitle={
+                stats.season && !stats.season.isCurrent
+                  ? "الرصيد عند إقفال الموسم"
+                  : stats.season?.opening?.systemBalance
+                    ? `منها ${Number(stats.season.opening.systemBalance).toLocaleString()} ج.م رصيد افتتاحي للموسم`
+                    : "رصيد النظام الحالي"
+              }
             />
           </div>
         </div>
@@ -432,6 +507,7 @@ export default function ProfessionalFinancialDashboard() {
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
+              loading={loading}
               title="عدد الطلبات"
               value={stats.summary.totalOrders}
               icon={ShoppingCart}
@@ -439,6 +515,7 @@ export default function ProfessionalFinancialDashboard() {
               subtitle={`${stats.summary.completedOrders} طلب مكتمل`}
             />
             <StatCard
+              loading={loading}
               title="قيمة المبيعات"
               value={`${stats.summary.ordersValue.toLocaleString()} ج.م`}
               icon={CreditCard}
@@ -446,6 +523,7 @@ export default function ProfessionalFinancialDashboard() {
               subtitle="إجمالي قيمة الفواتير"
             />
             <StatCard
+              loading={loading}
               title="قيمة المخزون (تكلُفة)"
               value={`${stats.summary.inventoryValue.toLocaleString()} ج.م`}
               icon={Package}
@@ -453,6 +531,7 @@ export default function ProfessionalFinancialDashboard() {
               subtitle="حسب أسعار الجملة"
             />
             <StatCard
+              loading={loading}
               title="تنبيهات النواقص"
               value={stats.summary.lowStockCount}
               icon={Zap}
@@ -464,10 +543,109 @@ export default function ProfessionalFinancialDashboard() {
           </div>
         </div>
 
+        {/* Section: Weight Storage */}
+        {(loading || stats.weightStock) && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                <Scale className="w-5 h-5 text-blue-500" />
+                مخزن الوزن
+              </h2>
+              <button
+                onClick={() => (window.location.href = "/dashboard/accounting?tab=weight")}
+                className="text-xs font-bold text-blue-600 hover:underline cursor-pointer"
+              >
+                سجل الحركات
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatCard
+              loading={loading}
+                title="الرصيد الحالي"
+                value={formatKg(weightStock.currentWeight)}
+                icon={Warehouse}
+                color={
+                  Number(weightStock.currentWeight || 0) <= 0
+                    ? "bg-rose-600"
+                    : weightStock.isLow
+                      ? "bg-amber-500"
+                      : "bg-emerald-500"
+                }
+                subtitle={
+                  weightStock.isLow
+                    ? `أقل من حد التنبيه (${formatKg(weightStock.lowStockThreshold)})`
+                    : `حد التنبيه ${formatKg(weightStock.lowStockThreshold)}`
+                }
+              />
+              <StatCard
+              loading={loading}
+                title="المباع بالوزن"
+                value={formatKg(weightStock.soldKg)}
+                icon={ShoppingCart}
+                color="bg-blue-500"
+                subtitle="صافي خلال الفترة المختارة"
+              />
+              <StatCard
+              loading={loading}
+                title="المنقول للمحلات"
+                value={formatKg(weightStock.transferredKg)}
+                icon={Truck}
+                color="bg-violet-500"
+                subtitle={`${weightStock.transfersCount || 0} عملية نقل خلال الفترة`}
+              />
+              <StatCard
+              loading={loading}
+                title="قيمة النقل"
+                value={`${Number(weightStock.transferValue || 0).toLocaleString()} ج.م`}
+                icon={HandCoins}
+                color="bg-amber-500"
+                subtitle={`المحصل ${Number(weightStock.transferCollected || 0).toLocaleString()} ج.م`}
+              />
+            </div>
+
+            <ChartCard
+            loading={loading}
+              title="حركة مخزن الوزن"
+              subtitle="الكيلوجرامات المباعة والمنقولة يومياً"
+              icon={Scale}
+            >
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={stats.dailyStats}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                  <XAxis
+                    dataKey="date"
+                    stroke="#94a3b8"
+                    style={{ fontSize: "10px" }}
+                    tickFormatter={(date) => format(new Date(date), "MM/dd")}
+                  />
+                  <YAxis stroke="#94a3b8" width={40} style={{ fontSize: "12px" }} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#fff",
+                      border: "1px solid #e2e8f0",
+                      borderRadius: "8px",
+                    }}
+                    formatter={(value, name) => [formatKg(value), name]}
+                  />
+                  <Legend />
+                  <Bar dataKey="weightSold" fill="#3b82f6" name="مباع" radius={[4, 4, 0, 0]} />
+                  <Bar
+                    dataKey="weightTransferred"
+                    fill="#8b5cf6"
+                    name="منقول للمحلات"
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
+          </div>
+        )}
+
         {/* Charts Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Income vs Expenses Chart */}
           <ChartCard
+            loading={loading}
             title="تحليل التدفق النقدي"
             subtitle="مقارنة الدخل والمصاريف يومياً"
             icon={TrendingUpIcon}
@@ -531,6 +709,7 @@ export default function ProfessionalFinancialDashboard() {
 
           {/* Orders Volume Chart */}
           <ChartCard
+            loading={loading}
             title="حجم الطلبات"
             subtitle="عدد الطلبات اليومية المحققة"
             icon={ShoppingCart}
@@ -571,6 +750,8 @@ export default function ProfessionalFinancialDashboard() {
         {/* Lower Grid: System Health and Recent Items */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <ChartCard
+            loading={loading}
+            skeleton={<RowsSkeleton count={4} />}
             title="حالة مخزون المنتجات"
             subtitle="متابعة كميات المنتجات المتوفرة والنواقص"
             icon={Package}
@@ -659,6 +840,8 @@ export default function ProfessionalFinancialDashboard() {
 
           <div className="lg:col-span-2">
             <ChartCard
+              loading={loading}
+              skeleton={<RowsSkeleton count={5} />}
               title="سجل المعاملات النقدية"
               subtitle="آخر العمليات المالية المسجلة في الخزينة"
               icon={Activity}

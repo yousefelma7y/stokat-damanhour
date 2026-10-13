@@ -19,7 +19,13 @@ export interface ITransaction extends Omit<Document, "_id"> {
   toWallet?: number; // For transfers
   description?: string;
   status: "pending" | "completed" | "failed" | "cancelled";
-  relatedModel?: "Order" | "Supplier" | "Customer" | "User" | "Scrap";
+  relatedModel?:
+    | "Order"
+    | "Supplier"
+    | "Customer"
+    | "User"
+    | "Scrap"
+    | "WeightStockMovement";
   relatedId?: number;
   createdBy?: string;
   isActive?: boolean;
@@ -56,7 +62,14 @@ const TransactionSchema = new Schema<ITransaction>(
     },
     relatedModel: {
       type: String,
-      enum: ["Order", "Supplier", "Customer", "User", "Scrap"],
+      enum: [
+        "Order",
+        "Supplier",
+        "Customer",
+        "User",
+        "Scrap",
+        "WeightStockMovement",
+      ],
     },
     relatedId: Number,
     createdBy: String,

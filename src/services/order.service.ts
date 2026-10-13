@@ -8,6 +8,11 @@ import Product from "@/models/Product";
 import Transaction from "@/models/Transaction";
 import WeightProduct from "@/models/WeightProduct";
 import { normalizeOrderPayments, roundMoney } from "@/lib/order-payments";
+import {
+  applyOrderWeightSale,
+  assertWeightAvailable,
+  sumWeightItems,
+} from "@/lib/weight-stock";
 import { CreateOrderInput } from "@/validations/order.schema";
 
 export class OrderService {
@@ -130,6 +135,8 @@ export class OrderService {
         );
       }
     }
+
+    await assertWeightAvailable(sumWeightItems(data.weightItems), session);
   }
 
   private static normalizeOrderTotals(data: CreateOrderInput) {
@@ -212,6 +219,8 @@ export class OrderService {
     for (const item of order.weightItems || []) {
       totalGain += item.total || item.weight * item.pricePerKg;
     }
+
+    await applyOrderWeightSale(order, createdBy, { session });
 
     const checkoutPayments =
       order.payments && order.payments.length > 0

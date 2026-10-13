@@ -7,6 +7,7 @@ import Supplier from "@/models/Supplier";
 import Customer from "@/models/Customer";
 import Activity from "@/models/Activity";
 import { getCurrentUserName } from "@/lib/get-current-user";
+import { assertSeasonUnlocked } from "@/lib/seasons";
 import {
   successResponse,
   errorResponse,
@@ -36,6 +37,10 @@ export async function PUT(
   try {
     await connectDB();
     const body = await request.json();
+    const existing = await Transaction.findById(id).select("createdAt");
+    if (!existing) return errorResponse("Transaction not found", 404);
+    await assertSeasonUnlocked(existing.createdAt, "هذه المعاملة");
+
     const data = await Transaction.findByIdAndUpdate(id, body, {
       new: true,
     });
@@ -55,7 +60,10 @@ export async function PUT(
     });
 
     return successResponse(data, "Transaction updated");
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.name === "SeasonError") {
+      return errorResponse(error.message, error.status);
+    }
     return handleError(error);
   }
 }
@@ -72,6 +80,7 @@ export async function DELETE(
     if (!transaction) return errorResponse("Transaction not found", 404);
     if (!transaction.isActive)
       return errorResponse("هذه المعاملة محذوفة بالفعل", 400);
+    await assertSeasonUnlocked(transaction.createdAt, "هذه المعاملة");
 
     const data = await Transaction.findByIdAndUpdate(
       id,
@@ -153,7 +162,10 @@ export async function DELETE(
     });
 
     return successResponse(data, "Transaction deleted");
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.name === "SeasonError") {
+      return errorResponse(error.message, error.status);
+    }
     return handleError(error);
   }
 }

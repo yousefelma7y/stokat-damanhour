@@ -12,6 +12,7 @@ import ContentTable from "@/components/contentTable";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import FiltersCombonent from "@/components/FiltersCombonent";
 import WeightProductsModal from "@/components/weight-products/WeightProductsModal";
+import WeightStockPanel from "@/components/weight-stock/WeightStockPanel";
 import PermissionGate from "@/components/PermissionGate";
 import ProtectedPage from "@/components/ProtectedPage";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -140,7 +141,7 @@ export default function WeightProductsPage() {
         <Title
           count={products.length}
           title="الوزن"
-          subTitle="إدارة الأصناف المباعة بالكيلو"
+          subTitle="إدارة مخزن الوزن والأصناف المباعة بالكيلو"
           button={
             userRole === "admin" && (
               <PermissionGate page="weight-products" action="create">
@@ -159,6 +160,15 @@ export default function WeightProductsPage() {
             )
           }
         />
+
+        <WeightStockPanel
+          canManage={canPerformAction("weight-products", "edit")}
+          setMessage={setMessage}
+        />
+
+        <h2 className="px-4 sm:px-8 pt-6 pb-2 font-bold text-gray-900 text-lg">
+          الأصناف المباعة بالكيلو
+        </h2>
 
         <FiltersCombonent
           placeholder="ابحث بالاسم أو الكود..."

@@ -24,12 +24,18 @@ import {
   Calendar,
   SeparatorVertical,
   ArrowLeftRight,
+  Scale,
 } from "lucide-react";
 import Pagination from "../../../components/Pagination";
 import PaymentMethodSelect from "../../../components/PaymentMethodSelect";
 import axiosClient from "@/lib/axios-client";
 import { useDebounce } from "use-debounce";
 import FiltersCombonent from "../../../components/FiltersCombonent";
+import WeightMovementsPanel from "@/components/weight-stock/WeightMovementsPanel";
+import SeasonSwitcher, {
+  ClosedSeasonBanner,
+  useSeasonParam,
+} from "@/components/seasons/SeasonSwitcher";
 
 // ============ SKELETON COMPONENTS ============
 
@@ -79,8 +85,11 @@ const LoadingOverlay = () => (
 
 // ============ COMPONENTS ============
 
-const StatCard = ({ icon: Icon, label, value, change, trend }) => (
-  <div className="bg-gradient-to-br from-slate-50 to-slate-100 p-6 border border-slate-200 hover:border-slate-300 rounded-xl transition-colors">
+const StatCard = ({ icon: Icon, label, value, change, trend, loading = false }) => (
+  <div
+    aria-busy={loading}
+    className="bg-gradient-to-br from-slate-50 to-slate-100 p-6 border border-slate-200 hover:border-slate-300 rounded-xl transition-colors"
+  >
     <div className="flex justify-between items-start mb-4">
       <div className="bg-white p-2.5 rounded-lg">
         <Icon className={`w-5 h-5 text-blue-600`} />
@@ -101,7 +110,11 @@ const StatCard = ({ icon: Icon, label, value, change, trend }) => (
       )}
     </div>
     <p className="mb-1 text-slate-600 text-sm">{label}</p>
-    <p className="font-bold text-slate-900 text-2xl">{value}</p>
+    {loading ? (
+      <div className="bg-slate-200 rounded w-32 h-8 animate-pulse" aria-hidden="true"></div>
+    ) : (
+      <p className="font-bold text-slate-900 text-2xl">{value}</p>
+    )}
   </div>
 );
 
@@ -128,6 +141,8 @@ const TransactionRow = ({ transaction, onViewDetails }) => {
       ? "رد تسوية"
     : isCancelledOrder
       ? "إلغاء طلب"
+      : transaction.category === "weight_transfer"
+        ? "نقل وزن"
       : isOutgoing
         ? "صرف"
         : "تحصيل";
@@ -528,6 +543,7 @@ const DetailsModal = ({ isOpen, onClose, transaction }) => {
     income: "تحصيل",
     expense: "صرف",
     transfer: "تحويل",
+    weight_transfer: "نقل وزن لمحل",
   };
   const statusLabels = {
     completed: "مكتملة",
@@ -764,6 +780,15 @@ export default function AccountingSystem() {
   const [paymentMethodId, setPaymentMethodId] = useState(null);
   const [type, setType] = useState(null);
   const [paymentMethods, setPaymentMethods] = useState([]);
+  const [activeTab, setActiveTab] = useState("transactions");
+  // null = current (open) season; an id = viewing a closed season read-only
+  const { seasonId, setSeasonId, ready: seasonReady } = useSeasonParam();
+  const [seasonInfo, setSeasonInfo] = useState(null);
+  const isClosedSeason = Boolean(seasonId);
+  // True while the cards still show another season's numbers (season just switched).
+  const summaryStale = seasonId
+    ? seasonInfo?._id !== seasonId
+    : Boolean(seasonInfo && !seasonInfo.isCurrent);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isFilterLoading, setIsFilterLoading] = useState(false);
@@ -799,6 +824,7 @@ export default function AccountingSystem() {
         page,
         limit,
         search: searchValue,
+        season: seasonId || "current",
       };
 
       if (filterStatus) params.status = filterStatus;
@@ -809,7 +835,9 @@ export default function AccountingSystem() {
 
       const [txnRes, statsRes, pmRes] = await Promise.all([
         axiosClient.get("/transactions", { params }),
-        axiosClient.get("/dashboard-stats"),
+        axiosClient.get("/dashboard-stats", {
+          params: { scope: "season", season: seasonId || undefined },
+        }),
         axiosClient.get("/payment-methods"),
       ]);
 
@@ -826,6 +854,7 @@ export default function AccountingSystem() {
         },
       );
       setSummary(statsRes.data.data.summary);
+      setSeasonInfo(statsRes.data.data.season || null);
       setPaymentMethods(pmRes.data.data || []);
     } catch (error) {
       console.error("Failed to fetch accounting data:", error);
@@ -839,10 +868,26 @@ export default function AccountingSystem() {
   };
 
   useEffect(() => {
-    setPage(1);
-  }, [searchValue, filterStatus, paymentMethodId, startDate, endDate, type]);
+    // Deep link from the weight-products page: /dashboard/accounting?tab=weight
+    if (new URLSearchParams(window.location.search).get("tab") === "weight") {
+      setActiveTab("weight");
+    }
+  }, []);
+
+  const switchTab = (tab) => {
+    setActiveTab(tab);
+    const url = new URL(window.location.href);
+    if (tab === "weight") url.searchParams.set("tab", "weight");
+    else url.searchParams.delete("tab");
+    window.history.replaceState(null, "", url);
+  };
 
   useEffect(() => {
+    setPage(1);
+  }, [searchValue, filterStatus, paymentMethodId, startDate, endDate, type, seasonId]);
+
+  useEffect(() => {
+    if (!seasonReady) return;
     if (isLoading) {
       fetchData(false);
     } else {
@@ -857,6 +902,8 @@ export default function AccountingSystem() {
     startDate,
     endDate,
     type,
+    seasonId,
+    seasonReady,
   ]);
 
   const handleTransferSubmit = async (transferData) => {
@@ -958,10 +1005,15 @@ export default function AccountingSystem() {
                 الحسابات
               </h1>
               <p className="mt-1 text-slate-600">
-                إدارة جميع المعاملات المالية
+                {seasonInfo
+                  ? `معاملات ${seasonInfo.name} — تبدأ الأرقام من صفر مع كل موسم`
+                  : "إدارة جميع المعاملات المالية"}
               </p>
             </div>
-            <div className="flex flex-wrap gap-3 w-full sm:w-auto">
+            <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+              <SeasonSwitcher value={seasonId} onChange={setSeasonId} />
+              {!isClosedSeason && (
+              <>
               {/* <button
                 disabled={paymentMethods?.length === 0}
                 onClick={() => setTransferModalOpen(true)}
@@ -1000,19 +1052,29 @@ export default function AccountingSystem() {
                 <ArrowUpRight className="w-4 h-4" />
                 تحصيل مبلغ
               </button>
+              </>
+              )}
             </div>
           </div>
+
+          {isClosedSeason && !summaryStale && (
+            <div className="mb-6">
+              <ClosedSeasonBanner season={seasonInfo} onBack={() => setSeasonId(null)} />
+            </div>
+          )}
 
           {/* Stats */}
           <div className="gap-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
+              loading={summaryStale}
               icon={DollarSign}
-              label="الرصيد في الخزينة"
+              label={isClosedSeason ? "رصيد الخزينة عند الإقفال" : "الرصيد في الخزينة"}
               value={`${summary.systemBalance.toLocaleString()} EGP`}
               change={0}
               trend="up"
             />
             <StatCard
+              loading={summaryStale}
               icon={ArrowDownLeft}
               label="إجمالي الدخل"
               value={`${summary.totalIncome.toLocaleString()} EGP`}
@@ -1020,6 +1082,7 @@ export default function AccountingSystem() {
               trend="up"
             />
             <StatCard
+              loading={summaryStale}
               icon={ArrowUpRight}
               label="إجمالي المصاريف"
               value={`${summary.totalExpenses.toLocaleString()} EGP`}
@@ -1027,6 +1090,7 @@ export default function AccountingSystem() {
               trend="down"
             />
             <StatCard
+              loading={summaryStale}
               icon={TrendingUp}
               label="صافي الأرباح"
               value={`${summary.netProfit.toLocaleString()} EGP`}
@@ -1039,6 +1103,40 @@ export default function AccountingSystem() {
 
       {/* Main Content */}
       <div className="mx-auto px-6 py-8">
+        <div
+          role="tablist"
+          aria-label="أقسام الحسابات"
+          className="inline-flex gap-1 bg-slate-100 p-1 rounded-xl mb-6"
+        >
+          {[
+            { id: "transactions", label: "العمليات المالية", Icon: Wallet },
+            { id: "weight", label: "حركات مخزن الوزن", Icon: Scale },
+          ].map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              role="tab"
+              aria-selected={activeTab === id}
+              onClick={() => switchTab(id)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-colors cursor-pointer ${
+                activeTab === id
+                  ? "bg-white text-blue-700 shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === "weight" ? (
+          <WeightMovementsPanel
+            key={seasonId || "current"}
+            seasonId={seasonId}
+            onChanged={() => fetchData(true)}
+          />
+        ) : (
+        <>
         <FilteredStatsSection
           stats={filteredStats}
           visible={
@@ -1104,7 +1202,14 @@ export default function AccountingSystem() {
           <div className="relative bg-white border border-slate-200 rounded-xl overflow-hidden">
             {isFilterLoading && <LoadingOverlay />}
 
-            {filteredTransactions.length > 0 ? (
+            {isFilterLoading && filteredTransactions.length === 0 ? (
+              <>
+                <TransactionRowSkeleton />
+                <TransactionRowSkeleton />
+                <TransactionRowSkeleton />
+                <TransactionRowSkeleton />
+              </>
+            ) : filteredTransactions.length > 0 ? (
               filteredTransactions.map((transaction) => (
                 <TransactionRow
                   key={transaction._id}
@@ -1135,6 +1240,8 @@ export default function AccountingSystem() {
             </div>
           )}
         </div>
+        </>
+        )}
       </div>
 
       <ManualTransactionModal

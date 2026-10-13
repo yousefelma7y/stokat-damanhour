@@ -140,6 +140,8 @@ export default function CreateOrderPage() {
   const [discountType, setDiscountType] = useState("fixed");
   const [products, setProducts] = useState([]);
   const [weightProducts, setWeightProducts] = useState([]);
+  const [weightStock, setWeightStock] = useState(null);
+  const [isLoadingWeightStock, setIsLoadingWeightStock] = useState(false);
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [isLoadingWeight, setIsLoadingWeight] = useState(false);
   const [loadingAction, setLoadingAction] = useState(false);
@@ -205,6 +207,18 @@ export default function CreateOrderPage() {
     }
   }, [searchTermDebounced]);
 
+  const fetchWeightStock = useCallback(async () => {
+    try {
+      setIsLoadingWeightStock(true);
+      const { data } = await axiosClient.get("/weight-stock");
+      setWeightStock(data.data?.stock || null);
+    } catch {
+      setWeightStock(null);
+    } finally {
+      setIsLoadingWeightStock(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (orderType === "purchase") {
       fetchProducts();
@@ -212,6 +226,10 @@ export default function CreateOrderPage() {
       fetchWeightProducts();
     }
   }, [orderType, fetchProducts, fetchWeightProducts]);
+
+  useEffect(() => {
+    if (orderType === "weight") fetchWeightStock();
+  }, [orderType, fetchWeightStock]);
 
   useEffect(() => {
     fetchPendingOrders();
@@ -309,6 +327,18 @@ export default function CreateOrderPage() {
 
   const subtotal = regularSubtotal + weightSubtotal;
 
+  const cartWeightKg = useMemo(
+    () =>
+      cart.reduce(
+        (sum, item) => (item.itemType === "weight" ? sum + Number(item.weight || 0) : sum),
+        0,
+      ),
+    [cart],
+  );
+  const availableWeightKg = weightStock ? Number(weightStock.currentWeight || 0) : null;
+  const remainingWeightKg =
+    availableWeightKg === null ? null : Math.max(0, availableWeightKg - cartWeightKg);
+
   const discountAmount = useMemo(() => {
     const value = Number(discountValue || 0);
     if (!value) return 0;
@@ -334,7 +364,7 @@ export default function CreateOrderPage() {
     setCustomerPhone("");
     setCustomerLocation("");
     setNotes("");
-    setDiscountValue(""); I
+    setDiscountValue("");
     setDiscountType("fixed");
     setOldCustomer(null);
     setResumingOrderId(null);
@@ -387,6 +417,14 @@ export default function CreateOrderPage() {
     }
 
     const weightKg = gramsToKg(weightGrams);
+
+    if (remainingWeightKg !== null && weightKg > remainingWeightKg + 0.0005) {
+      setMessage({
+        type: "error",
+        message: `الوزن غير متوفر في المخزن. المتاح ${formatGrams(kgToGrams(remainingWeightKg))} جم`,
+      });
+      return;
+    }
 
     setCart((current) => [
       ...current,
@@ -616,6 +654,9 @@ export default function CreateOrderPage() {
       });
 
       setRefreshPending((value) => value + 1);
+      if (status === "completed" && orderData.weightItems.length > 0) {
+        fetchWeightStock();
+      }
       setTimeout(resetForm, 1200);
     } catch (error) {
       setMessage({
@@ -762,6 +803,28 @@ export default function CreateOrderPage() {
                 <h3 className="font-bold text-slate-900">
                   {orderType === "weight" ? "أصناف الوزن" : "المنتجات"}
                 </h3>
+                {orderType === "weight" && isLoadingWeightStock && remainingWeightKg === null && (
+                  <span
+                    role="status"
+                    aria-label="جاري تحميل المخزون المتاح"
+                    className="ms-auto h-6 w-40 rounded-full bg-slate-200 animate-pulse"
+                  />
+                )}
+                {orderType === "weight" && remainingWeightKg !== null && (
+                  <span
+                    className={`ms-auto rounded-full px-3 py-1 text-xs font-bold tabular-nums ${
+                      remainingWeightKg <= 0
+                        ? "bg-rose-100 text-rose-700"
+                        : weightStock && availableWeightKg <= Number(weightStock.lowStockThreshold || 0)
+                          ? "bg-amber-100 text-amber-800"
+                          : "bg-emerald-100 text-emerald-700"
+                    }`}
+                    title="الوزن المتاح في المخزن بعد ما في العربة"
+                  >
+                    المتاح في المخزن{" "}
+                    {remainingWeightKg.toLocaleString("ar-EG", { maximumFractionDigits: 3 })} كجم
+                  </span>
+                )}
               </div>
 
               {(orderType === "weight" ? isLoadingWeight : isLoadingProducts) ? (

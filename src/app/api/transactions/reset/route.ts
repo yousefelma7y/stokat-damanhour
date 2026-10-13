@@ -2,12 +2,17 @@ import { NextRequest } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import Account from "@/models/Account";
 import Activity from "@/models/Activity";
-import { getCurrentUserName } from "@/lib/get-current-user";
-import { successResponse, handleError } from "@/lib/api-response";
+import { getCurrentUser, getCurrentUserName } from "@/lib/get-current-user";
+import { successResponse, errorResponse, handleError } from "@/lib/api-response";
 
 export async function POST(request: NextRequest) {
   try {
     await connectDB();
+
+    const user = await getCurrentUser(request);
+    if (user?.role !== "admin") {
+      return errorResponse("غير مصرح لك بإعادة تعيين الرصيد", 403);
+    }
 
     // Find and reset system account
     let systemAccount = await Account.findOne({ accountType: "system" });

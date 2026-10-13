@@ -9,8 +9,16 @@ import Transaction from "@/models/Transaction";
 import WeightProduct from "@/models/WeightProduct";
 import { connectDB } from "@/lib/mongodb";
 import { normalizeOrderPayments, roundMoney } from "@/lib/order-payments";
+import {
+  applyOrderWeightSale,
+  getWeightStock,
+  revertOrderWeightSale,
+  sumWeightItems,
+  formatKg,
+} from "@/lib/weight-stock";
 import { withRetry, withTimeout } from "@/lib/retry-helper";
 import { getCurrentUserName } from "@/lib/get-current-user";
+import { assertSeasonUnlocked } from "@/lib/seasons";
 import {
   errorResponse,
   handleError,
@@ -122,7 +130,7 @@ async function revertOrderEffects(
   currentUser: string,
   reason: "adjustment" | "cancelled_order" = "adjustment",
 ) {
-  if (!order || order.status !== "completed") return;
+  if (!order || order.status !== "completed") return { weightReturned: false };
 
   const checkoutPayments = getCheckoutPayments(order);
   const paidAtCheckout = sumPayments(checkoutPayments);
@@ -161,6 +169,8 @@ async function revertOrderEffects(
       $inc: { stock: item.quantity || 0 },
     });
   }
+
+  const weightReturn = await revertOrderWeightSale(order, currentUser, reason);
 
   const systemAccount = await Account.findOne({ accountType: "system" });
   if (systemAccount) {
@@ -234,9 +244,15 @@ async function revertOrderEffects(
       })),
     );
   }
+
+  return { weightReturned: Boolean(weightReturn) };
 }
 
-async function applyOrderEffects(order: any, currentUser: string) {
+async function applyOrderEffects(
+  order: any,
+  currentUser: string,
+  { deductWeight = true }: { deductWeight?: boolean } = {},
+) {
   if (!order || order.status !== "completed") return;
 
   let totalGain = 0;
@@ -273,6 +289,11 @@ async function applyOrderEffects(order: any, currentUser: string) {
 
   for (const item of order.weightItems || []) {
     totalGain += item.total || 0;
+  }
+
+  // Stock availability is validated by the caller before this runs.
+  if (deductWeight) {
+    await applyOrderWeightSale(order, currentUser, { allowNegative: true });
   }
 
   let systemAccount = await Account.findOne({ accountType: "system" });
@@ -360,13 +381,21 @@ export async function PUT(
 
     const oldOrder = await populateOrder(Order.findById(id));
     if (!oldOrder) return errorResponse("Order not found", 404);
+    await assertSeasonUnlocked(oldOrder.createdAt, "هذا الطلب");
 
     const nextStatus = body.status || oldOrder.status || "pending";
-    await revertOrderEffects(
+    const { weightReturned } = await revertOrderEffects(
       oldOrder,
       currentUser,
       nextStatus === "cancelled" ? "cancelled_order" : "adjustment",
     );
+    // Orders completed before weight-stock tracking existed never took weight
+    // out of storage, so editing them must not deduct it now either.
+    const isUntrackedWeightOrder =
+      oldOrder.status === "completed" &&
+      !weightReturned &&
+      sumWeightItems(oldOrder.weightItems) > 0;
+    const restoreOptions = { deductWeight: weightReturned };
 
     if (body.customer && typeof body.customer === "object") {
       const existingCustomer = await Customer.findOne({
@@ -397,12 +426,12 @@ export async function PUT(
 
     if (nextStatus !== "cancelled") {
       if (nextOrderType === "regular" && items.length === 0) {
-        await applyOrderEffects(oldOrder, currentUser);
+        await applyOrderEffects(oldOrder, currentUser, restoreOptions);
         return errorResponse("طلب المنتجات يجب أن يحتوي على منتج واحد على الأقل", 400);
       }
 
       if (nextOrderType === "weight" && weightItems.length === 0) {
-        await applyOrderEffects(oldOrder, currentUser);
+        await applyOrderEffects(oldOrder, currentUser, restoreOptions);
         return errorResponse("طلب الوزن يجب أن يحتوي على صنف وزن واحد على الأقل", 400);
       }
     }
@@ -411,7 +440,7 @@ export async function PUT(
       for (const item of items) {
         const product = await Product.findById(item.product);
         if (!product || product.stock < item.quantity) {
-          await applyOrderEffects(oldOrder, currentUser);
+          await applyOrderEffects(oldOrder, currentUser, restoreOptions);
           return errorResponse(`لا يوجد مخزون كافٍ للمنتج "${product?.name || item.product}"`, 400);
         }
       }
@@ -419,8 +448,21 @@ export async function PUT(
       for (const item of weightItems) {
         const weightProduct = await WeightProduct.findById(item.weightProduct);
         if (!weightProduct) {
-          await applyOrderEffects(oldOrder, currentUser);
+          await applyOrderEffects(oldOrder, currentUser, restoreOptions);
           return errorResponse(`صنف الوزن غير موجود "${item.weightProduct}"`, 400);
+        }
+      }
+
+      const requiredWeight = sumWeightItems(weightItems);
+      if (requiredWeight > 0 && !isUntrackedWeightOrder) {
+        const weightStock = await getWeightStock();
+        const availableWeight = Number(weightStock?.currentWeight || 0);
+        if (availableWeight + 0.0005 < requiredWeight) {
+          await applyOrderEffects(oldOrder, currentUser, restoreOptions);
+          return errorResponse(
+            `مخزون الوزن غير كافٍ. المطلوب ${formatKg(requiredWeight)} والمتاح ${formatKg(availableWeight)}`,
+            400,
+          );
         }
       }
     }
@@ -478,7 +520,7 @@ export async function PUT(
         customer: body.customer || oldOrder.customer,
       });
     } catch (error: any) {
-      await applyOrderEffects(oldOrder, currentUser);
+      await applyOrderEffects(oldOrder, currentUser, restoreOptions);
       return errorResponse(error.message || "بيانات الدفع غير صحيحة", 400);
     }
 
@@ -513,7 +555,9 @@ export async function PUT(
     if (!updatedOrder) return errorResponse("Failed to update order", 500);
 
     const finalOrder = await populateOrder(Order.findById(id));
-    await applyOrderEffects(finalOrder, currentUser);
+    await applyOrderEffects(finalOrder, currentUser, {
+      deductWeight: !isUntrackedWeightOrder,
+    });
 
     await Activity.create({
       action: "تم تعديل طلب",
@@ -525,7 +569,10 @@ export async function PUT(
     });
 
     return successResponse(finalOrder, "Order updated successfully");
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.name === "SeasonError") {
+      return errorResponse(error.message, error.status);
+    }
     return handleError(error);
   }
 }
@@ -539,6 +586,7 @@ export async function DELETE(
     await connectDB();
     const order = await Order.findById(id).populate("customer");
     if (!order) return errorResponse("Order not found", 404);
+    await assertSeasonUnlocked(order.createdAt, "هذا الطلب");
 
     const data = await Order.findByIdAndUpdate(
       id,
@@ -557,7 +605,10 @@ export async function DELETE(
     });
 
     return successResponse(data, "Order deleted");
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.name === "SeasonError") {
+      return errorResponse(error.message, error.status);
+    }
     return handleError(error);
   }
 }
