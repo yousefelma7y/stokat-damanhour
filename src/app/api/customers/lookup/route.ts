@@ -3,6 +3,7 @@
 import { NextRequest } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import Customer from "@/models/Customer";
+import { getTopCustomerRank } from "@/lib/top-customers";
 import {
   successResponse,
   errorResponse,
@@ -33,7 +34,13 @@ export async function GET(request: NextRequest) {
     });
 
     if (customer) {
-      return successResponse(customer, "تم العثور على العميل");
+      // topRank (1-10) tells the cashier this is one of the best customers.
+      const { completedOrders = [], ...rest } = customer.toObject();
+      const topRank = await getTopCustomerRank(customer._id);
+      return successResponse(
+        { ...rest, ordersCount: completedOrders.length, topRank },
+        "تم العثور على العميل",
+      );
     } else {
       return successResponse(null, "العميل غير موجود");
     }

@@ -16,6 +16,7 @@ import LoadingSpinner from "../../../components/LoadingSpinner";
 import FiltersCombonent from "../../../components/FiltersCombonent";
 import { useDebounce } from "use-debounce";
 import Cookies from "js-cookie";
+import TopCustomers, { TopRankBadge } from "../../../components/customers/TopCustomers";
 
 // Validation Schema
 const ValidationSchema = Yup.object().shape({
@@ -55,6 +56,8 @@ export default function Customers() {
   const [totalPages, setTotalPages] = useState(1);
 
   const [customers, setCustomers] = useState([]);
+  const [topCustomers, setTopCustomers] = useState([]);
+  const [topLoaded, setTopLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadingBtn, setLoadingBtn] = useState(false);
   const [refetsh, setRefetsh] = useState(false);
@@ -72,11 +75,13 @@ export default function Customers() {
           page: page,
           limit: limit,
           search: searchValue,
+          withTop: 1, // top 10 by payments come back separately; the list holds the rest
         };
         setIsLoading(true);
         const { data } = await axiosClient.get(`/customers`, { params });
 
         setCustomers(data.data);
+        setTopCustomers(data.topCustomers || []);
         setTotalPages(data?.pages);
       } catch (error) {
         console.log(error);
@@ -87,6 +92,7 @@ export default function Customers() {
         }
       } finally {
         setIsLoading(false);
+        setTopLoaded(true);
       }
     };
     fetchData();
@@ -341,6 +347,24 @@ export default function Customers() {
         setSearch={setSearch}
       />
 
+      {/* أفضل 10 عملاء (تختفي أثناء البحث لتظهر النتائج مباشرة) */}
+      {!searchValue && (
+        <>
+          <TopCustomers
+            customers={topCustomers}
+            isLoading={!topLoaded}
+            showMoney={userRole === "admin"}
+            canOpen={userRole === "admin" || userRole === "accountant"}
+          />
+          {topCustomers.length > 0 && (
+            <h2 className="px-4 sm:px-8 pb-2 font-bold text-gray-900 text-lg">
+              باقي العملاء
+              <span className="mr-2 text-sm font-normal text-gray-500">الأحدث أولاً</span>
+            </h2>
+          )}
+        </>
+      )}
+
       {/* جدول العملاء */}
       {isLoading ? (
         <LoadingSpinner />
@@ -351,7 +375,14 @@ export default function Customers() {
               return userRole === "admin"
                 ? {
                     _id: customer?._id,
-                    name: customer?.name,
+                    name: customer?.topRank ? (
+                      <span className="inline-flex items-center gap-2">
+                        {customer.name}
+                        <TopRankBadge rank={customer.topRank} />
+                      </span>
+                    ) : (
+                      customer?.name
+                    ),
                     phone: customer?.phone,
                     location: customer?.location || "لا يوجد",
                     completedOrders: customer?.completedOrders?.length || 0,
@@ -373,7 +404,14 @@ export default function Customers() {
                   }
                 : {
                     _id: customer?._id,
-                    name: customer?.name,
+                    name: customer?.topRank ? (
+                      <span className="inline-flex items-center gap-2">
+                        {customer.name}
+                        <TopRankBadge rank={customer.topRank} />
+                      </span>
+                    ) : (
+                      customer?.name
+                    ),
                     phone: customer?.phone,
                     location: customer?.location || "لا يوجد",
                   };

@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/mongodb";
 import Customer from "@/models/Customer";
 import Activity from "@/models/Activity";
 import { getCurrentUserName } from "@/lib/get-current-user";
+import { getTopCustomers, TopCustomer } from "@/lib/top-customers";
 import {
   successResponse,
   errorResponse,
@@ -25,18 +26,36 @@ export async function GET(request: NextRequest) {
       ];
     }
 
+    // withTop=1 → also return the top paying customers. When browsing (no search)
+    // they are left out of the list so they only appear once, in their own section;
+    // when searching they stay in the results, marked with their rank.
+    let topCustomers: TopCustomer[] = [];
+    if (searchParams.get("withTop")) {
+      topCustomers = await getTopCustomers();
+      if (!search && topCustomers.length > 0) {
+        filter._id = { $nin: topCustomers.map((customer) => customer._id) };
+      }
+    }
+
     const skip = (page - 1) * limit;
     const total = await Customer.countDocuments(filter);
-    const data = await Customer.find(filter)
+    const docs = await Customer.find(filter)
       .skip(skip)
       .limit(limit)
       .sort({ createdAt: -1 });
+
+    const rankById = new Map(topCustomers.map((customer) => [customer._id, customer.rank]));
+    const data =
+      rankById.size > 0
+        ? docs.map((doc) => ({ ...doc.toObject(), topRank: rankById.get(doc._id) || null }))
+        : docs;
 
     return successResponse(data, "Customers retrieved", {
       page,
       limit,
       total,
       pages: Math.ceil(total / limit),
+      ...(searchParams.get("withTop") ? { topCustomers } : {}),
     });
   } catch (error) {
     return handleError(error);

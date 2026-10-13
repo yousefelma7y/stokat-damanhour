@@ -25,6 +25,8 @@ import LoadingSpinner from "@/components/LoadingSpinner";
 import OrderReceiptDialog from "@/components/Order/OrderReceiptDialog";
 import axiosClient from "@/lib/axios-client";
 import PaymentSplitSelect from "@/components/PaymentSplitSelect";
+import VipCustomerAlert from "@/components/customers/VipCustomerAlert";
+import Cookies from "js-cookie";
 
 const gramsToKg = (grams) => Number(grams || 0) / 1000;
 const kgToGrams = (kg) => Number((Number(kg || 0) * 1000).toFixed(2));
@@ -135,6 +137,8 @@ export default function CreateOrderPage() {
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerLocation, setCustomerLocation] = useState("");
   const [oldCustomer, setOldCustomer] = useState(null);
+  const [isLookingUpCustomer, setIsLookingUpCustomer] = useState(false);
+  const [userRole, setUserRole] = useState(null);
   const [notes, setNotes] = useState("");
   const [discountValue, setDiscountValue] = useState("");
   const [discountType, setDiscountType] = useState("fixed");
@@ -240,6 +244,7 @@ export default function CreateOrderPage() {
 
     const fetchCustomer = async () => {
       try {
+        setIsLookingUpCustomer(true);
         const { data } = await axiosClient.get(
           `/customers/lookup?phone=${customerPhoneDebounced}`,
         );
@@ -253,11 +258,21 @@ export default function CreateOrderPage() {
         }
       } catch {
         setOldCustomer(null);
+      } finally {
+        setIsLookingUpCustomer(false);
       }
     };
 
     fetchCustomer();
   }, [customerPhoneDebounced]);
+
+  useEffect(() => {
+    setUserRole(Cookies.get("role") || null);
+  }, []);
+
+  // One of the top 10 customers, as long as the phone on screen is still theirs.
+  const vipCustomer =
+    oldCustomer?.topRank && oldCustomer.phone === customerPhone ? oldCustomer : null;
 
   useEffect(() => {
     if (!submittedBarcode) return;
@@ -750,11 +765,19 @@ export default function CreateOrderPage() {
             className={`${pendingOrders.length > 0 ? "lg:col-span-4" : "lg:col-span-6"
               } order-1 lg:order-2 space-y-6`}
           >
-            <div className="bg-blue-50 rounded-2xl p-4 border border-blue-100 shadow-sm space-y-4">
+            <div
+              className={`rounded-2xl p-4 border shadow-sm space-y-4 transition-colors ${
+                vipCustomer ? "bg-amber-50/60 border-amber-300" : "bg-blue-50 border-blue-100"
+              }`}
+            >
               <div className="flex items-center gap-2">
-                <User size={18} className="text-blue-600" />
-                <h3 className="font-bold text-blue-900">بيانات العميل</h3>
+                <User size={18} className={vipCustomer ? "text-amber-600" : "text-blue-600"} />
+                <h3 className={`font-bold ${vipCustomer ? "text-amber-900" : "text-blue-900"}`}>
+                  بيانات العميل
+                </h3>
               </div>
+
+              <VipCustomerAlert customer={vipCustomer} showMoney={userRole === "admin"} />
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="relative">
@@ -765,8 +788,18 @@ export default function CreateOrderPage() {
                     placeholder="رقم الهاتف *"
                     value={customerPhone}
                     onChange={(e) => setCustomerPhone(e.target.value.replace(/[^0-9]/g, ""))}
-                    className="w-full pr-10 pl-3 py-2.5 border-2 border-gray-200 bg-white rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                    className={`w-full pr-10 pl-9 py-2.5 border-2 bg-white rounded-lg text-sm focus:outline-none ${
+                      vipCustomer
+                        ? "border-amber-400 focus:border-amber-500"
+                        : "border-gray-200 focus:border-blue-500"
+                    }`}
                   />
+                  {isLookingUpCustomer && (
+                    <Loader
+                      aria-label="جاري البحث عن العميل"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-blue-500 animate-spin"
+                    />
+                  )}
                 </div>
 
                 <div className="relative">
