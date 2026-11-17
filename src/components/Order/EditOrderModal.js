@@ -22,9 +22,19 @@ const EditOrderModal = ({
     suppliers = [],
     scraps = [], // Added scraps
     servicesList = [], // Added services
+    salesUsers = [],
     loadingBtn = false
 }) => {
     const [open, setOpen] = useState(false);
+
+    // Current sales user id; older orders fall back to matching createdBy by name
+    const getInitialSalesUser = () => {
+        const id = editingOrder?.salesUser?._id ?? editingOrder?.salesUser;
+        if (id) return String(id);
+        const legacyName = editingOrder?.salesUserName || editingOrder?.createdBy;
+        const match = salesUsers.find((u) => u.userName === legacyName);
+        return match ? String(match._id) : "";
+    };
 
     useEffect(() => {
         if (showModal) {
@@ -101,6 +111,7 @@ const EditOrderModal = ({
                             : [],
                     isDebt: Number(editingOrder?.remainingAmount || 0) > 0,
                     supplier: editingOrder?.supplier?._id || editingOrder?.supplier || "",
+                    salesUser: getInitialSalesUser(),
                     order_type: editingOrder?.order_type || "regular",
                     scrapItems: editingOrder?.scrapItems?.map(item => {
                         const isScrapRef = item.refModel === "Scrap";
@@ -167,6 +178,7 @@ const EditOrderModal = ({
                     discount: Yup.number().min(0, "الخصم يجب أن يكون صفر أو أكبر"),
                     shipping: Yup.number().min(0, "الشحن يجب أن يكون صفر أو أكبر"),
                     status: Yup.string().required("حالة الطلب مطلوبة"),
+                    salesUser: Yup.string().required("البائع مطلوب"),
                     paymentMethodId: Yup.string(),
                     payments: Yup.array().of(
                         Yup.object({
@@ -899,6 +911,31 @@ const EditOrderModal = ({
                                                 <option value="completed">ناجح</option>
                                                 <option value="cancelled">ملغي</option>
                                             </Field>
+                                        </div>
+
+                                        <div>
+                                            <label className="block mb-2 font-medium text-gray-700 text-sm">
+                                                البائع *
+                                            </label>
+                                            <Field
+                                                as="select"
+                                                name="salesUser"
+                                                className={`px-4 py-1 border !h-11 rounded-lg outline-none focus:ring-2 w-full ${
+                                                    errors.salesUser && touched.salesUser
+                                                        ? "border-red-500 bg-red-50 focus:ring-red-400"
+                                                        : "border-gray-300 focus:ring-indigo-500"
+                                                }`}
+                                            >
+                                                <option value="">اختر البائع</option>
+                                                {salesUsers.map((u) => (
+                                                    <option key={u._id} value={String(u._id)}>
+                                                        {u.userName}
+                                                    </option>
+                                                ))}
+                                            </Field>
+                                            {errors.salesUser && touched.salesUser && (
+                                                <div className="mt-1 text-red-500 text-xs">{errors.salesUser}</div>
+                                            )}
                                         </div>
 
                                         <div className="col-span-2 space-y-3 rounded-xl border border-slate-200 bg-white p-3">

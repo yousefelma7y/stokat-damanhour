@@ -16,6 +16,7 @@ import {
   HandCoins,
   ChevronDown,
   ChevronUp,
+  BadgeCheck,
 } from "lucide-react";
 import { useDebounce } from "use-debounce";
 import OrderTypeNav from "@/components/CreateOrder/OrderTypeNav";
@@ -161,6 +162,10 @@ export default function CreateOrderPage() {
   const [isDebt, setIsDebt] = useState(false);
   const [cartItemsOpen, setCartItemsOpen] = useState(true);
   const [cartDetailsOpen, setCartDetailsOpen] = useState(false);
+  const [salesUsers, setSalesUsers] = useState([]);
+  const [isLoadingSalesUsers, setIsLoadingSalesUsers] = useState(false);
+  const [salesUserId, setSalesUserId] = useState("");
+  const [salesUserError, setSalesUserError] = useState("");
 
   const [searchTermDebounced] = useDebounce(searchTerm, 400);
   const [customerPhoneDebounced] = useDebounce(customerPhone, 500);
@@ -268,6 +273,34 @@ export default function CreateOrderPage() {
 
   useEffect(() => {
     setUserRole(Cookies.get("role") || null);
+  }, []);
+
+  // Load users that can be credited with the sale; default to the logged-in user
+  useEffect(() => {
+    const fetchSalesUsers = async () => {
+      try {
+        setIsLoadingSalesUsers(true);
+        const { data } = await axiosClient.get("/users/options");
+        const list = data.data || [];
+        setSalesUsers(list);
+
+        let currentUserId = "";
+        try {
+          currentUserId = String(JSON.parse(Cookies.get("user") || "{}")?._id || "");
+        } catch {
+          currentUserId = "";
+        }
+        setSalesUserId((prev) => {
+          if (prev) return prev;
+          return list.some((u) => String(u._id) === currentUserId) ? currentUserId : "";
+        });
+      } catch {
+        setMessage({ type: "error", message: "خطأ في تحميل قائمة البائعين" });
+      } finally {
+        setIsLoadingSalesUsers(false);
+      }
+    };
+    fetchSalesUsers();
   }, []);
 
   // One of the top 10 customers, as long as the phone on screen is still theirs.
@@ -510,6 +543,11 @@ export default function CreateOrderPage() {
     setDiscountValue(order.discount?.value?.toString() || "");
     setDiscountType(order.discount?.type || "fixed");
     setResumingOrderId(order._id);
+    const resumedSalesUser = order.salesUser?._id ?? order.salesUser;
+    if (resumedSalesUser) {
+      setSalesUserId(String(resumedSalesUser));
+      setSalesUserError("");
+    }
     setPayments(
       order.payments?.length
         ? order.payments.map((payment) => ({
@@ -562,6 +600,13 @@ export default function CreateOrderPage() {
 
     if (!customerName.trim() || !customerPhone.trim()) {
       setMessage({ type: "error", message: "أدخل اسم ورقم هاتف العميل" });
+      return;
+    }
+
+    if (!salesUserId) {
+      setSalesUserError("يجب اختيار البائع");
+      setMessage({ type: "error", message: "يجب اختيار البائع الذي قام بالبيع" });
+      window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
 
@@ -647,6 +692,7 @@ export default function CreateOrderPage() {
       order_type: orderType === "weight" ? "weight" : "regular",
       status,
       notes,
+      salesUser: Number(salesUserId),
     };
 
     try {
@@ -778,6 +824,48 @@ export default function CreateOrderPage() {
               </div>
 
               <VipCustomerAlert customer={vipCustomer} showMoney={userRole === "admin"} />
+
+              <div>
+                <div className="relative">
+                  <BadgeCheck
+                    className={`absolute right-3 top-1/2 -translate-y-1/2 ${
+                      salesUserError ? "text-red-500" : "text-gray-400"
+                    }`}
+                    size={16}
+                  />
+                  <select
+                    dir="rtl"
+                    aria-label="البائع"
+                    value={salesUserId}
+                    disabled={isLoadingSalesUsers}
+                    onChange={(e) => {
+                      setSalesUserId(e.target.value);
+                      if (e.target.value) setSalesUserError("");
+                    }}
+                    className={`w-full pr-10 pl-9 py-2.5 border-2 bg-white rounded-lg text-sm focus:outline-none ${
+                      salesUserError
+                        ? "border-red-500 bg-red-50 focus:border-red-500"
+                        : "border-gray-200 focus:border-blue-500"
+                    }`}
+                  >
+                    <option value="">
+                      {isLoadingSalesUsers ? "جاري تحميل البائعين..." : "اختر البائع *"}
+                    </option>
+                    {salesUsers.map((user) => (
+                      <option key={user._id} value={String(user._id)}>
+                        {user.userName}
+                        {user.role === "admin" ? " (مدير)" : user.role === "cashier" ? " (بائع)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  {isLoadingSalesUsers && (
+                    <Loader className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-blue-500 animate-spin" />
+                  )}
+                </div>
+                {salesUserError && (
+                  <p className="mt-1 text-red-500 text-xs">{salesUserError}</p>
+                )}
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="relative">

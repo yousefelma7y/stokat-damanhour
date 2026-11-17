@@ -92,6 +92,14 @@ export const createOrderSchema = z
     isDebt: z.boolean().default(false),
     remainingAmount: nullableNumberDefault(0),
     notes: nullableString,
+    salesUser: z.preprocess(
+      (val) => (val === null || val === "" ? undefined : Number(val)),
+      z
+        .number({ error: "البائع غير صالح" })
+        .int("البائع غير صالح")
+        .positive("البائع غير صالح")
+        .optional(),
+    ),
     priceDiff: nullableNumberDefault(0),
     orderNumber: nullableString,
     total: z.number(),

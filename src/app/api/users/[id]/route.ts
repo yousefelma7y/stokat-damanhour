@@ -8,6 +8,11 @@ import {
   errorResponse,
   handleError,
 } from "@/lib/api-response";
+import {
+  validateUserPayload,
+  validationErrorResponse,
+  mongooseErrorToFieldErrors,
+} from "@/lib/user-validation";
 
 export async function GET(
   request: NextRequest,
@@ -32,7 +37,19 @@ export async function PUT(
   try {
     await connectDB();
     const body = await request.json();
-    const data = await User.findByIdAndUpdate(id, body, { new: true });
+
+    // Don't overwrite the password with an empty value
+    if (!body.password) delete body.password;
+
+    const errors = await validateUserPayload(body, "update", id);
+    if (Object.keys(errors).length) return validationErrorResponse(errors);
+
+    if ("salary" in body) body.salary = Number(body.salary);
+
+    const data = await User.findByIdAndUpdate(id, body, {
+      new: true,
+      runValidators: true,
+    });
     if (!data) return errorResponse("User not found", 404);
 
     // Get current user
@@ -50,6 +67,8 @@ export async function PUT(
 
     return successResponse(data, "User updated");
   } catch (error) {
+    const fieldErrors = mongooseErrorToFieldErrors(error);
+    if (fieldErrors) return validationErrorResponse(fieldErrors);
     return handleError(error);
   }
 }

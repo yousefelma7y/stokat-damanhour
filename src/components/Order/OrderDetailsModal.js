@@ -155,6 +155,12 @@ const OrderDetailsModal = ({ isOpen, onClose, orderId }) => {
                   <Tag className="w-3.5 h-3.5" />
                   {orderType.label}
                 </span>
+                {(order.salesUser?.userName || order.salesUserName || order.createdBy) && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-violet-100 text-violet-800">
+                    <User className="w-3.5 h-3.5" />
+                    البائع: {order.salesUser?.userName || order.salesUserName || order.createdBy}
+                  </span>
+                )}
                 <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
                   <Calendar className="w-3.5 h-3.5" />
                   {new Date(order.createdAt).toLocaleDateString("ar-EG", {

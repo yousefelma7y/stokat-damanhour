@@ -6,6 +6,7 @@ import "./Product"; // Register Product model
 import "./Customer"; // Register Customer model
 import "./Supplier"; // Register Supplier model
 import "./WeightProduct";
+import "./User"; // Register User model (sales user)
 
 interface IOrderItem {
   product: number;
@@ -68,6 +69,8 @@ export interface IOrder extends Omit<Document, "_id"> {
   debtStatus?: "none" | "open" | "partial" | "settled";
   debtSettlements?: IOrderDebtSettlement[];
   notes?: string;
+  salesUser?: number; // Ref to User who made the sale (for targets)
+  salesUserName?: string; // Snapshot of the sales user's name
   isActive: boolean;
   createdBy?: string;
   createdAt: Date;
@@ -145,6 +148,8 @@ const OrderSchema = new Schema<IOrder>(
       },
     ],
     notes: String,
+    salesUser: { type: Number, ref: "User" },
+    salesUserName: String,
     isActive: { type: Boolean, default: true },
     createdBy: String,
   },
@@ -164,6 +169,7 @@ OrderSchema.index({ status: 1 });
 OrderSchema.index({ order_type: 1 });
 OrderSchema.index({ createdAt: -1 });
 OrderSchema.index({ isActive: 1 });
+OrderSchema.index({ salesUser: 1, status: 1, createdAt: -1 });
 OrderSchema.index({ customer: 1, status: 1, remainingAmount: 1, isActive: 1 });
 
 if (mongoose.models.Order) {

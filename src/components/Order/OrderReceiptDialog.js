@@ -552,6 +552,14 @@ const OrderReceipt = ({ order, isGift, user, storeSettings }) => {
               {order?.customer?.name || "عميل نقدي"}
             </span>
           </div>
+          {(order?.salesUser?.userName || order?.salesUserName) && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+              <span style={{ fontWeight: '900', color: '#000' }}>البائع:</span>
+              <span style={{ fontWeight: '700', color: '#000' }}>
+                {order?.salesUser?.userName || order?.salesUserName}
+              </span>
+            </div>
+          )}
           {order?.customer?.phone && (
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ fontWeight: '900', color: '#000' }}>الهاتف:</span>

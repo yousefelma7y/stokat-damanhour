@@ -9,6 +9,11 @@ import {
   errorResponse,
   handleError,
 } from "@/lib/api-response";
+import {
+  validateUserPayload,
+  validationErrorResponse,
+  mongooseErrorToFieldErrors,
+} from "@/lib/user-validation";
 
 export async function GET(request: NextRequest) {
   try {
@@ -59,7 +64,14 @@ export async function POST(request: NextRequest) {
   try {
     await connectDB();
     const body = await request.json();
-    const data = await User.create(body);
+
+    const errors = await validateUserPayload(body, "create");
+    if (Object.keys(errors).length) return validationErrorResponse(errors);
+
+    const data = await User.create({
+      ...body,
+      salary: Number(body.salary) || 0,
+    });
 
     // Get current user
     const currentUser = await getCurrentUserName(request);
@@ -76,6 +88,8 @@ export async function POST(request: NextRequest) {
 
     return successResponse(data, "User created");
   } catch (error) {
+    const fieldErrors = mongooseErrorToFieldErrors(error);
+    if (fieldErrors) return validationErrorResponse(fieldErrors);
     return handleError(error);
   }
 }

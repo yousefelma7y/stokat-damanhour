@@ -18,6 +18,7 @@ import {
 } from "@/lib/weight-stock";
 import { withRetry, withTimeout } from "@/lib/retry-helper";
 import { getCurrentUserName } from "@/lib/get-current-user";
+import { resolveSalesUser } from "@/lib/sales-user";
 import { assertSeasonUnlocked } from "@/lib/seasons";
 import {
   errorResponse,
@@ -31,6 +32,7 @@ export const maxDuration = 10;
 function populateOrder(query: any) {
   return query
     .populate("customer", "name phone location")
+    .populate("salesUser", "userName role")
     .populate("items.product", "name model size price stock")
     .populate("weightItems.weightProduct", "name pricePerKg");
 }
@@ -383,6 +385,22 @@ export async function PUT(
     if (!oldOrder) return errorResponse("Order not found", 404);
     await assertSeasonUnlocked(oldOrder.createdAt, "هذا الطلب");
 
+    // Validate the sales user before touching any stock/money effects
+    let salesInfo: { salesUser?: number; salesUserName?: string } | null =
+      null;
+    if (hasBodyField(body, "salesUser")) {
+      if (body.salesUser === null || body.salesUser === "") {
+        return errorResponse("يجب اختيار البائع", 400);
+      }
+      try {
+        salesInfo = await resolveSalesUser(getRefId(body.salesUser));
+      } catch (error: any) {
+        return errorResponse(error.message || "البائع غير صالح", 400);
+      }
+    }
+    delete body.salesUser;
+    delete body.salesUserName;
+
     const nextStatus = body.status || oldOrder.status || "pending";
     const { weightReturned } = await revertOrderEffects(
       oldOrder,
@@ -547,6 +565,12 @@ export async function PUT(
         amount: discountAmount,
       },
       total: nextTotal,
+      ...(salesInfo
+        ? {
+            salesUser: salesInfo.salesUser,
+            salesUserName: salesInfo.salesUserName,
+          }
+        : {}),
     };
 
     const updatedOrder = await Order.findByIdAndUpdate(id, updateBody, {

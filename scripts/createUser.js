@@ -67,7 +67,7 @@ async function createUser() {
         const hashedPassword = await bcrypt.hash('123456', 10); // 10 = salt rounds
 
         const user = await User.create({
-            userName: 'admin',
+            userName: 'admin2',
             salary: 0,
             password: hashedPassword,
             brandName: 'Stockat Damanhour',

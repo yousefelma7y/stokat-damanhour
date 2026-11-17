@@ -16,15 +16,50 @@ import LoadingSpinner from "../../../components/LoadingSpinner";
 import FiltersCombonent from "../../../components/FiltersCombonent";
 import { useDebounce } from "use-debounce";
 
-// Validation Schema
-const ValidationSchema = Yup.object().shape({
-  userName: Yup.string().required("اسم العميل مطلوب"),
-  phone: Yup.string().required("رقم الهاتف مطلوب"),
-  role: Yup.string().required("الوظيفة مطلوبة"),
-  location: Yup.string().required("الموقع مطلوب"),
-  salary: Yup.string().required("الراتب مطلوب"),
-  // password: Yup.string().required("كلمة المرور مطلوبة"),
-});
+// Validation Schema (password is only required when creating a new user)
+const getValidationSchema = (isEdit) =>
+  Yup.object().shape({
+    userName: Yup.string()
+      .trim()
+      .required("اسم المستخدم مطلوب")
+      .min(3, "اسم المستخدم يجب أن يكون 3 أحرف على الأقل"),
+    phone: Yup.string()
+      .required("رقم الهاتف مطلوب")
+      .matches(/^01[0-9]{9}$/, "رقم الهاتف يجب أن يكون 11 رقم ويبدأ بـ 01"),
+    role: Yup.string().required("الوظيفة مطلوبة"),
+    location: Yup.string().trim().required("العنوان مطلوب"),
+    salary: Yup.number()
+      .typeError("الراتب يجب أن يكون رقم")
+      .required("الراتب مطلوب")
+      .min(0, "الراتب لا يمكن أن يكون سالب"),
+    password: isEdit
+      ? Yup.string()
+      : Yup.string()
+          .required("كلمة المرور مطلوبة")
+          .min(6, "كلمة المرور يجب أن تكون 6 أحرف على الأقل"),
+  });
+
+const FIELD_LABELS = {
+  userName: "إسم المستخدم",
+  phone: "رقم الهاتف",
+  role: "الوظيفة",
+  location: "العنوان",
+  salary: "الراتب",
+  password: "كلمة المرور",
+};
+
+const inputClass = (hasError) =>
+  `px-4 py-2 border rounded-lg outline-none focus:ring-2 w-full ${
+    hasError
+      ? "border-red-500 bg-red-50 focus:ring-red-400"
+      : "border-gray-300 focus:ring-indigo-500"
+  }`;
+
+const FieldError = ({ name, errors, touched, submitCount }) => {
+  const show = errors?.[name] && (touched?.[name] || submitCount > 0);
+  if (!show) return null;
+  return <div className="mt-1 text-red-500 text-sm">{errors[name]}</div>;
+};
 
 // Initial form values
 const initialFormValues = {
@@ -95,50 +130,36 @@ export default function Users() {
     fetchData();
   }, [page, refetsh]);
 
-  const handleSubmit = async (values, { setSubmitting, resetForm }) => {
-    console.log(values, editingCustomer);
+  const handleSubmit = async (
+    values,
+    { setSubmitting, resetForm, setErrors, setStatus },
+  ) => {
+    setStatus(null);
+    setLoadingBtn(true);
     try {
-      if (editingCustomer) {
-        try {
-          setLoadingBtn(true);
-          const { data } = await axiosClient.put(
-            `/users/${editingCustomer._id}`,
-            values,
-          );
+      const payload = { ...values, salary: Number(values.salary) };
+      if (editingCustomer && !payload.password) delete payload.password;
 
-          setMessage({ type: "success", message: data.message });
-        } catch (error) {
-          console.log(error);
-          if (error.response) {
-            setMessage({ type: "error", message: error.response.data.message });
-          } else {
-            setMessage({ type: "error", message: error.message });
-          }
-        } finally {
-          setRefetsh(!refetsh);
-          setLoadingBtn(false);
-        }
-      } else {
-        try {
-          setLoadingBtn(true);
-          const { data } = await axiosClient.post(`/users`, values);
+      const { data } = editingCustomer
+        ? await axiosClient.put(`/users/${editingCustomer._id}`, payload)
+        : await axiosClient.post(`/users`, payload);
 
-          setMessage({ type: "success", message: data.message });
-        } catch (error) {
-          console.log(error);
-          setMessage({ type: "error", message: error?.response?.data?.error });
-        } finally {
-          setRefetsh(!refetsh);
-          setLoadingBtn(false);
-        }
-      }
-
+      setMessage({ type: "success", message: data.message });
       resetForm();
       setEditingCustomer(null);
-    } catch (error) {
-      console.error("Error submitting order:", error);
-    } finally {
       setShowModal(false);
+      setRefetsh((prev) => !prev);
+    } catch (error) {
+      console.log(error);
+      const res = error?.response?.data;
+      // Show field-level errors returned by the server (e.g. duplicate username)
+      if (res?.errors) setErrors(res.errors);
+      const msg = res?.message || error?.message || "حدث خطأ غير متوقع";
+      setStatus({ serverError: res?.errors ? null : msg });
+      setMessage({ type: "error", message: msg });
+      // keep the modal open so the user can fix the errors
+    } finally {
+      setLoadingBtn(false);
       setSubmitting(false);
     }
   };
@@ -178,7 +199,10 @@ export default function Users() {
         bgWhite
         open={showModal}
         setOpen={(val) => {
-          if (!val) setShowModal(null);
+          if (!val) {
+            setShowModal(false);
+            setEditingCustomer(null);
+          }
         }}
       >
         <div>
@@ -193,173 +217,196 @@ export default function Users() {
           initialValues={
             editingCustomer
               ? {
-                  userName: editingCustomer?.userName,
-                  phone: editingCustomer?.phone,
-                  role: editingCustomer?.role,
-                  location: editingCustomer?.location,
-                  salary: editingCustomer?.salary,
+                  userName: editingCustomer?.userName ?? "",
+                  phone: editingCustomer?.phone ?? "",
+                  role: editingCustomer?.role ?? "",
+                  location: editingCustomer?.location ?? "",
+                  salary: editingCustomer?.salary ?? "",
+                  password: "",
                 }
               : initialFormValues
           }
-          validationSchema={ValidationSchema}
+          validationSchema={getValidationSchema(!!editingCustomer)}
           onSubmit={handleSubmit}
           enableReinitialize
         >
-          {({ values, errors, touched, isSubmitting, setFieldValue }) => (
-            <Form className="space-y-4 mt-4 px-1 max-h-[80vh] overflow-y-auto">
-              {/* Customer Information */}
-              <div className="space-y-4 p-2 rounded-lg">
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="block font-medium text-gray-700 text-sm">
-                      إسم المستخدم *
-                    </label>
-                    {errors?.userName && touched?.userName && (
-                      <div className="mt-1 text-red-500 text-sm">
-                        {errors.userName}
-                      </div>
-                    )}
+          {({ errors, touched, submitCount, status }) => {
+            const errProps = { errors, touched, submitCount };
+            const hasErr = (name) =>
+              !!errors?.[name] && (!!touched?.[name] || submitCount > 0);
+            const errorEntries = Object.entries(errors || {}).filter(
+              ([, v]) => typeof v === "string",
+            );
+            return (
+              <Form
+                noValidate
+                className="space-y-4 mt-4 px-1 max-h-[80vh] overflow-y-auto"
+              >
+                {/* Errors summary */}
+                {(submitCount > 0 && errorEntries.length > 0) ||
+                status?.serverError ? (
+                  <div className="bg-red-50 p-3 border border-red-300 rounded-lg text-red-700 text-sm">
+                    <div className="mb-1 font-bold">
+                      يرجى تصحيح الأخطاء التالية:
+                    </div>
+                    <ul className="space-y-1 pr-5 list-disc">
+                      {status?.serverError && <li>{status.serverError}</li>}
+                      {submitCount > 0 &&
+                        errorEntries.map(([field, msg]) => (
+                          <li key={field}>
+                            <span className="font-semibold">
+                              {FIELD_LABELS[field] || field}:
+                            </span>{" "}
+                            {msg}
+                          </li>
+                        ))}
+                    </ul>
                   </div>
+                ) : null}
 
-                  <Field
-                    type="text"
-                    name="userName"
-                    placeholder="أدخل إسم المستخدم"
-                    className="px-4 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 w-full"
-                  />
-                </div>
-
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="block font-medium text-gray-700 text-sm">
-                      رقم الهاتف *
-                    </label>
-                    {errors?.phone && touched?.phone && (
-                      <div className="mt-1 text-red-500 text-sm">
-                        {errors.phone}
-                      </div>
-                    )}
-                  </div>
-                  <Field name="phone">
-                    {({ field, form }) => (
-                      <input
-                        {...field}
-                        type="tel"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        placeholder="أدخل رقم الهاتف "
-                        onChange={(e) => {
-                          // Allow only numbers
-                          const value = e.target.value.replace(/[^0-9]/g, "");
-                          form.setFieldValue(field.name, value);
-                        }}
-                        className="px-4 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 w-full !text-end"
-                      />
-                    )}
-                  </Field>
-                </div>
-
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="block font-medium text-gray-700 text-sm">
-                      الوظيفة *
-                    </label>
-                    {errors?.role && touched?.role && (
-                      <div className="mt-1 text-red-500 text-sm">
-                        {errors.role}
-                      </div>
-                    )}
-                  </div>
-                  <Field
-                    as="select"
-                    name={`role`}
-                    className="px-3 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 w-full"
-                  >
-                    <option value="">اختر الوظيفة</option>
-                    <option value="admin">مدير</option>
-                    <option value="cashier">بائع</option>
-                  </Field>
-                </div>
-
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="block font-medium text-gray-700 text-sm">
-                      عنوان المستخدم *
-                    </label>
-                  </div>
-
-                  <Field
-                    type="text"
-                    name="location"
-                    placeholder="أدخل عنوان المستخدم"
-                    className="px-4 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 w-full"
-                  />
-                </div>
-
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="block font-medium text-gray-700 text-sm">
-                      الراتب *
-                    </label>
-                  </div>
-
-                  <Field
-                    type="number"
-                    name="salary"
-                    placeholder="أدخل الراتب "
-                    className="px-4 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 w-full"
-                  />
-                </div>
-
-                {!editingCustomer && (
+                {/* Customer Information */}
+                <div className="space-y-4 p-2 rounded-lg">
                   <div>
                     <div className="flex justify-between items-center mb-2">
                       <label className="block font-medium text-gray-700 text-sm">
-                        كلمة المرور *
+                        إسم المستخدم *
                       </label>
-                      {errors?.password && touched?.password && (
-                        <div className="mt-1 text-red-500 text-sm">
-                          {errors.password}
-                        </div>
-                      )}
+                      <FieldError name="userName" {...errProps} />
                     </div>
 
                     <Field
-                      type="password"
-                      name="password"
-                      className="px-3 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 w-full"
+                      type="text"
+                      name="userName"
+                      placeholder="أدخل إسم المستخدم"
+                      className={inputClass(hasErr("userName"))}
                     />
                   </div>
-                )}
-              </div>
 
-              <div dir="ltr" className="flex justify-between space-x-4 pt-4">
-                <Button
-                  large
-                  onClick={() => {
-                    setShowModal(false);
-                    setEditingCustomer(null);
-                  }}
-                  label={"إلغاء"}
-                  variant="filled"
-                  rounded="xl"
-                  fixedPadding="3"
-                  color="danger"
-                />
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="block font-medium text-gray-700 text-sm">
+                        رقم الهاتف *
+                      </label>
+                      <FieldError name="phone" {...errProps} />
+                    </div>
+                    <Field name="phone">
+                      {({ field, form }) => (
+                        <input
+                          {...field}
+                          type="tel"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          placeholder="أدخل رقم الهاتف "
+                          onChange={(e) => {
+                            // Allow only numbers
+                            const value = e.target.value.replace(/[^0-9]/g, "");
+                            form.setFieldValue(field.name, value);
+                          }}
+                          maxLength={11}
+                          className={`${inputClass(hasErr("phone"))} !text-end`}
+                        />
+                      )}
+                    </Field>
+                  </div>
 
-                <Button
-                  large
-                  label={editingCustomer ? "تحديث" : "إضافة"}
-                  variant="filled"
-                  type="submit"
-                  rounded="xl"
-                  fixedPadding="3"
-                  disabled={loadingBtn}
-                  isLoading={loadingBtn}
-                />
-              </div>
-            </Form>
-          )}
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="block font-medium text-gray-700 text-sm">
+                        الوظيفة *
+                      </label>
+                      <FieldError name="role" {...errProps} />
+                    </div>
+                    <Field
+                      as="select"
+                      name={`role`}
+                      className={inputClass(hasErr("role"))}
+                    >
+                      <option value="">اختر الوظيفة</option>
+                      <option value="admin">مدير</option>
+                      <option value="cashier">بائع</option>
+                    </Field>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="block font-medium text-gray-700 text-sm">
+                        عنوان المستخدم *
+                      </label>
+                      <FieldError name="location" {...errProps} />
+                    </div>
+
+                    <Field
+                      type="text"
+                      name="location"
+                      placeholder="أدخل عنوان المستخدم"
+                      className={inputClass(hasErr("location"))}
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="block font-medium text-gray-700 text-sm">
+                        الراتب *
+                      </label>
+                      <FieldError name="salary" {...errProps} />
+                    </div>
+
+                    <Field
+                      type="number"
+                      name="salary"
+                      placeholder="أدخل الراتب "
+                      min="0"
+                      className={inputClass(hasErr("salary"))}
+                    />
+                  </div>
+
+                  {!editingCustomer && (
+                    <div>
+                      <div className="flex justify-between items-center mb-2">
+                        <label className="block font-medium text-gray-700 text-sm">
+                          كلمة المرور *
+                        </label>
+                        <FieldError name="password" {...errProps} />
+                      </div>
+
+                      <Field
+                        type="password"
+                        name="password"
+                        placeholder="6 أحرف على الأقل"
+                        className={inputClass(hasErr("password"))}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div dir="ltr" className="flex justify-between space-x-4 pt-4">
+                  <Button
+                    large
+                    onClick={() => {
+                      setShowModal(false);
+                      setEditingCustomer(null);
+                    }}
+                    label={"إلغاء"}
+                    variant="filled"
+                    rounded="xl"
+                    fixedPadding="3"
+                    color="danger"
+                  />
+
+                  <Button
+                    large
+                    label={editingCustomer ? "تحديث" : "إضافة"}
+                    variant="filled"
+                    type="submit"
+                    rounded="xl"
+                    fixedPadding="3"
+                    disabled={loadingBtn}
+                    isLoading={loadingBtn}
+                  />
+                </div>
+              </Form>
+            );
+          }}
         </Formik>
       </Modal>
 

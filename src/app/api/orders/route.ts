@@ -4,7 +4,11 @@ import { connectDB } from "@/lib/mongodb";
 import { paginate } from "@/lib/query-helper";
 import { OrderService } from "@/services/order.service";
 import { createOrderSchema } from "@/validations/order.schema";
-import { getCurrentUserName } from "@/lib/get-current-user";
+import { getCurrentUser } from "@/lib/get-current-user";
+import {
+  buildSalesUserCondition,
+  resolveSalesUser,
+} from "@/lib/sales-user";
 import {
   errorResponse,
   handleError,
@@ -33,19 +37,30 @@ export async function GET(request: NextRequest) {
     if (searchParams.get("createdBy")) {
       filter.createdBy = searchParams.get("createdBy");
     }
+    const andConditions: any[] = [];
+    const salesUserParam = searchParams.get("salesUser");
+    if (salesUserParam) {
+      const salesCondition = await buildSalesUserCondition(salesUserParam);
+      if (!salesCondition) return errorResponse("البائع غير صالح", 400);
+      andConditions.push(salesCondition);
+    }
     const paymentMethodFilter =
       searchParams.get("paymentMethodId") || searchParams.get("paymentMethod");
     if (paymentMethodFilter) {
       const pm = paymentMethodFilter;
       if (!Number.isNaN(Number(pm))) {
-        filter.$or = [
-          { paymentMethodId: Number(pm) },
-          { "payments.paymentMethodId": Number(pm) },
-        ];
+        andConditions.push({
+          $or: [
+            { paymentMethodId: Number(pm) },
+            { "payments.paymentMethodId": Number(pm) },
+          ],
+        });
       } else {
         filter.paymentMethod = pm;
       }
     }
+
+    if (andConditions.length) filter.$and = andConditions;
 
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
@@ -64,6 +79,7 @@ export async function GET(request: NextRequest) {
       limit: Number(searchParams.get("limit")),
       populate: [
         { path: "customer", select: "name phone location" },
+        { path: "salesUser", select: "userName role" },
         { path: "items.product", select: "name model size" },
         { path: "weightItems.weightProduct", select: "name pricePerKg" },
       ],
@@ -125,8 +141,23 @@ export async function POST(request: NextRequest) {
       return errorResponse(messages || "Invalid input", 400);
     }
 
-    const currentUser = await getCurrentUserName(request);
-    const order = await OrderService.createOrder(validatedData.data, currentUser);
+    const authUser = await getCurrentUser(request);
+    const currentUser = authUser?.userName || "النظام";
+
+    // Who gets credit for this sale (defaults to the logged-in user)
+    const salesInfo = await resolveSalesUser(
+      validatedData.data.salesUser,
+      authUser,
+    );
+    if (!salesInfo.salesUser) {
+      return errorResponse("يجب اختيار البائع", 400);
+    }
+
+    const order = await OrderService.createOrder(
+      validatedData.data,
+      currentUser,
+      salesInfo,
+    );
     return successResponse(order, "Order created successfully");
   } catch (error: any) {
     return errorResponse(error.message, 400);

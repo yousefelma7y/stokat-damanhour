@@ -113,6 +113,20 @@ const OrderTotalCell = ({ order }) => {
   );
 };
 
+// Sales user credited with the order (older orders fall back to createdBy)
+const getSalesUserName = (order) =>
+  order?.salesUser?.userName || order?.salesUserName || order?.createdBy || "";
+
+const SalesUserCell = ({ order }) => {
+  const name = getSalesUserName(order);
+  if (!name) return <span className="text-slate-400">—</span>;
+  return (
+    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-violet-100 text-violet-700">
+      {name}
+    </span>
+  );
+};
+
 const OrderDateTimeCell = ({ date }) => (
   <span className="inline-flex flex-col items-center gap-1">
     <span className="font-medium text-gray-800">{formatDatePart(date)}</span>
@@ -136,6 +150,8 @@ export default function OrdersPage() {
   const [status, setStatus] = useState(null);
   const [orderType, setOrderType] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState(null);
+  const [salesUser, setSalesUser] = useState(null);
+  const [salesUsers, setSalesUsers] = useState([]);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -147,6 +163,7 @@ export default function OrdersPage() {
     completedOrders: 0,
     pendingOrders: 0,
     cancelledOrders: 0,
+    totalRevenue: 0,
   });
 
   const [showEditModal, setShowEditModal] = useState(false);
@@ -170,6 +187,7 @@ export default function OrdersPage() {
       if (status) params.status = status;
       if (orderType) params.orderType = orderType;
       if (paymentMethod) params.paymentMethodId = paymentMethod;
+      if (salesUser) params.salesUser = salesUser;
       if (startDate) params.startDate = startDate;
       if (endDate) params.endDate = endDate;
 
@@ -222,6 +240,20 @@ export default function OrdersPage() {
   };
 
   useEffect(() => {
+    const fetchSalesUsers = async () => {
+      try {
+        const { data } = await axiosClient.get("/users/options");
+        setSalesUsers(
+          (data.data || []).map((user) => ({ ...user, name: user.userName })),
+        );
+      } catch (error) {
+        console.error("Failed to fetch sales users:", error);
+      }
+    };
+    fetchSalesUsers();
+  }, []);
+
+  useEffect(() => {
     if (userRole === "admin") {
       fetchCatalogData();
     } else if (userRole) {
@@ -231,11 +263,11 @@ export default function OrdersPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [searchValue, status, orderType, paymentMethod, startDate, endDate]);
+  }, [searchValue, status, orderType, paymentMethod, salesUser, startDate, endDate]);
 
   useEffect(() => {
     fetchOrders();
-  }, [page, limit, searchValue, status, orderType, paymentMethod, startDate, endDate, refetch]);
+  }, [page, limit, searchValue, status, orderType, paymentMethod, salesUser, startDate, endDate, refetch]);
 
   const handleDelete = async () => {
     try {
@@ -339,6 +371,7 @@ export default function OrdersPage() {
         paidAmount,
         isDebt: Boolean(values.isDebt),
         supplier: values.supplier || null,
+        salesUser: values.salesUser ? Number(values.salesUser) : null,
       };
 
       const { data } = await axiosClient.put(`/orders/${editingOrder._id}`, orderData);
@@ -375,6 +408,7 @@ export default function OrdersPage() {
     return {
       _id: order._id,
       name: order.customer?.name || "عميل نقدي",
+      salesUser: <SalesUserCell order={order} />,
       itemsQty:
         order.order_type === "weight"
           ? `${formatGrams(weightItemsGrams)} جم`
@@ -458,7 +492,11 @@ export default function OrdersPage() {
         />
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6 px-4">
+      <div
+        className={`grid grid-cols-2 gap-3 md:gap-4 mb-6 px-4 ${
+          userRole === "admin" ? "md:grid-cols-5" : "md:grid-cols-4"
+        }`}
+      >
         <div className="bg-white rounded-xl p-4 shadow-lg border border-gray-100">
           <p className="text-gray-600 text-xs md:text-sm mb-1">إجمالي الطلبات</p>
           <p className="text-2xl md:text-3xl font-bold text-gray-900">{stats.totalOrders || 0}</p>
@@ -475,6 +513,19 @@ export default function OrdersPage() {
           <p className="text-gray-600 text-xs md:text-sm mb-1">الطلبات الملغاة</p>
           <p className="text-2xl md:text-3xl font-bold text-red-600">{stats.cancelledOrders || 0}</p>
         </div>
+        {userRole === "admin" && (
+          <div className="col-span-2 md:col-span-1 bg-white rounded-xl p-4 shadow-lg border border-violet-100">
+            <p className="text-gray-600 text-xs md:text-sm mb-1">
+              {salesUser
+                ? `مبيعات ${salesUsers.find((u) => String(u._id) === String(salesUser))?.userName || "البائع"}`
+                : "إجمالي المبيعات"}
+            </p>
+            <p className="text-xl md:text-2xl font-bold text-violet-700" dir="ltr">
+              {formatMoney(stats.totalRevenue)}
+            </p>
+            <p className="text-[10px] text-slate-400 mt-1">الطلبات الناجحة فقط</p>
+          </div>
+        )}
       </div>
 
       <FiltersCombonent
@@ -511,6 +562,13 @@ export default function OrdersPage() {
             value: paymentMethod,
             onChange: setPaymentMethod,
             items: paymentMethodsList,
+            byId: true,
+          },
+          {
+            placeholder: "البائع",
+            value: salesUser,
+            onChange: setSalesUser,
+            items: salesUsers,
             byId: true,
           },
         ]}
@@ -552,6 +610,7 @@ export default function OrdersPage() {
           header={[
             "رقم الطلب",
             "اسم العميل",
+            "البائع",
             "عدد العناصر",
             "السعر",
             "نوع الطلب",
@@ -586,6 +645,7 @@ export default function OrdersPage() {
         suppliers={suppliers}
         scraps={scraps}
         servicesList={servicesList}
+        salesUsers={salesUsers}
       />
     </div>
   );

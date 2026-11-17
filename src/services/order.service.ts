@@ -14,9 +14,14 @@ import {
   sumWeightItems,
 } from "@/lib/weight-stock";
 import { CreateOrderInput } from "@/validations/order.schema";
+import type { ResolvedSalesUser } from "@/lib/sales-user";
 
 export class OrderService {
-  static async createOrder(data: CreateOrderInput, createdBy: string) {
+  static async createOrder(
+    data: CreateOrderInput,
+    createdBy: string,
+    salesInfo: ResolvedSalesUser = {},
+  ) {
     const session = await mongoose.startSession();
     session.startTransaction();
 
@@ -91,6 +96,8 @@ export class OrderService {
             remainingAmount: paymentInfo.remainingAmount,
             isDebt: paymentInfo.isDebt,
             debtStatus: paymentInfo.debtStatus,
+            salesUser: salesInfo.salesUser,
+            salesUserName: salesInfo.salesUserName,
             createdBy,
           },
         ],
@@ -111,6 +118,7 @@ export class OrderService {
 
       const populatedOrder = await Order.findById(order._id)
         .populate("customer", "name phone location")
+        .populate("salesUser", "userName role")
         .populate("items.product", "name model size price stock")
         .populate("weightItems.weightProduct", "name pricePerKg");
 
@@ -336,6 +344,8 @@ export class OrderService {
             total: order.total,
             paidAmount: paidAtCheckout,
             remainingAmount,
+            salesUser: order.salesUser,
+            salesUserName: order.salesUserName,
           },
         },
       ],
